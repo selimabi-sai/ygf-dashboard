@@ -67,7 +67,7 @@ p,span,label {{ color: {MUTED}; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background: {SURFACE}; border-radius: 8px; padding: 4px; }}
 .stTabs [data-baseweb="tab"] {{ background: transparent; color: {MUTED}; border-radius: 6px; padding: 8px 16px; font-weight: 500; }}
 .stTabs [aria-selected="true"] {{ background: {ACCENT}33; color: {TEXT}; border: 1px solid {ACCENT}55; }}
-.block-container {{ padding-top: 1rem; }}
+.block-container {{ padding-top: 2.5rem; }}
 header[data-testid="stHeader"] {{ background: {BG}; }}
 div[data-testid="stMetricDelta"] > div {{ font-size: 13px; }}
 </style>""", unsafe_allow_html=True)
@@ -292,7 +292,7 @@ karda = len(dfY[dfY["portfoy"] > 100]) if not dfY.empty else 0
 # ═══════════════════════════════════════════════
 # SEKMELER
 # ═══════════════════════════════════════════════
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 Genel Bakış", "👤 Katılımcılar", "📑 Hisse İcmal", "📊 İstatistikler"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 Genel Bakış", "👤 Katılımcılar", "📑 Seçimler", "📊 İstatistikler"])
 
 # ═══════════════════════════════════════════════
 # SEKME 1: GENEL BAKIŞ
@@ -523,7 +523,7 @@ with tab2:
                 fig4.add_trace(go.Scatterpolar(r=vals_r + [vals_r[0]], theta=cats + [cats[0]],
                     fill="toself", fillcolor="rgba(240,180,41,0.15)",
                     line=dict(color=GOLD, width=2), name=secili))
-                fig4.update_layout(**plotly_layout("Yetenek Radarı", 320))
+                fig4.update_layout(**plotly_layout("Radar", 320))
                 fig4.update_layout(polar=dict(bgcolor=CARD,
                     radialaxis=dict(visible=True, range=[0, 100], gridcolor=BORDER, tickfont=dict(size=8, color=DIM)),
                     angularaxis=dict(gridcolor=BORDER, tickfont=dict(size=10, color=MUTED))))
@@ -560,7 +560,7 @@ with tab2:
 # ═══════════════════════════════════════════════
 with tab3:
     if not icmal:
-        st.warning("Hisse İcmal verisi bulunamadı.")
+        st.warning("Seçim verisi bulunamadı.")
     else:
         p_options = list(icmal.keys())
         secili_p = st.radio("Periyot", p_options, horizontal=True, label_visibility="collapsed")
