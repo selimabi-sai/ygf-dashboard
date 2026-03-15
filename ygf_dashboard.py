@@ -58,6 +58,39 @@ def aktif_p():
 st.set_page_config(page_title="YGF Dashboard", page_icon="🏆", layout="wide",
                    initial_sidebar_state="collapsed")
 
+# ═══════════════════════════════════════════════
+# ŞİFRE KORUMASI
+# ═══════════════════════════════════════════════
+def sifre_kontrol():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if st.session_state.authenticated:
+        return True
+    st.markdown(f"""<style>.stApp {{ background-color: {BG}; }}</style>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="display:flex;justify-content:center;align-items:center;min-height:70vh;">
+        <div style="text-align:center;">
+            <div style="font-size:64px;font-weight:900;
+            background:linear-gradient(135deg,{GOLD},{GREEN});
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            margin-bottom:8px;">YGF</div>
+            <div style="color:{DIM};font-size:13px;margin-bottom:24px;">Giriş yapın</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        sifre = st.text_input("Şifre", type="password", label_visibility="collapsed", placeholder="Şifre girin...")
+        if sifre:
+            if sifre == "ygf2026":
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Yanlış şifre")
+    return False
+
+if not sifre_kontrol():
+    st.stop()
+
 st.markdown(f"""<style>
 .stApp {{ background-color: {BG}; }}
 [data-testid="stSidebar"] {{ background-color: {SURFACE}; }}
