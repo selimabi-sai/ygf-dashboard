@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 YGF DASHBOARD v2
-Sai Amator Yatirim — 2026
 
 streamlit run ygf_dashboard.py
 """
@@ -251,10 +250,9 @@ gun_no = (datetime.now() - ap_b).days + 1
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.markdown(f"""<div style="padding:8px 0;">
-    <span style="font-size:28px;font-weight:800;
+    <span style="font-size:36px;font-weight:800;
     background:linear-gradient(90deg,{GOLD},{GREEN});-webkit-background-clip:text;
     -webkit-text-fill-color:transparent;">YGF</span>
-    <span style="color:{DIM};font-size:13px;margin-left:12px;">Sai Amator Yatirim — 2026</span>
     </div>""", unsafe_allow_html=True)
 with col_h2:
     st.markdown(f"""<div style="text-align:right;padding:8px 0;">
@@ -294,7 +292,7 @@ karda = len(dfY[dfY["portfoy"] > 100]) if not dfY.empty else 0
 # ═══════════════════════════════════════════════
 # SEKMELER
 # ═══════════════════════════════════════════════
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 Genel Bakis", "👤 Yarismacilar", "📑 Hisse Icmal", "📊 Istatistikler"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 Genel Bakış", "👤 Katılımcılar", "📑 Hisse İcmal", "📊 İstatistikler"])
 
 # ═══════════════════════════════════════════════
 # SEKME 1: GENEL BAKIŞ
@@ -303,7 +301,7 @@ with tab1:
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(kpi_card("🏆", "Lider", lider["isim"] if lider is not None else "—",
-            f"Portfoy: {lider['portfoy']:.2f}" if lider is not None else "", GOLD), unsafe_allow_html=True)
+            f"Portföy: {lider['portfoy']:.2f}" if lider is not None else "", GOLD), unsafe_allow_html=True)
     with k2:
         bv = bist_row["portfoy"] if bist_row is not None else 0
         st.markdown(kpi_card("📈", "BIST 100", f"{bv:.2f}" if bv else "—",
@@ -317,19 +315,17 @@ with tab1:
         st.markdown(kpi_card("🏦", "Faiz", f"{fv:.2f}" if fv else "—",
             f"YTD: {fv-100:+.2f}%" if fv else "", renk(fv-100 if fv else 0)), unsafe_allow_html=True)
     with k5:
-        st.markdown(kpi_card("👥", "Yarismacilar", str(len(dfY)),
-            f"Karda: {karda}/{len(dfY)}", GREEN if karda > len(dfY)//2 else RED), unsafe_allow_html=True)
+        st.markdown(kpi_card("👥", "Katılımcılar", str(len(dfY)),
+            f"Kârda: {karda}/{len(dfY)}", GREEN if karda > len(dfY)//2 else RED), unsafe_allow_html=True)
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     # Sıralama tablosu
-    avatar_colors = PAL + [MUTED, MUTED, MUTED]
-
     tbl = f"""<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:12px;">
     <thead><tr style="background:{BG2};color:{MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
     <th style="padding:8px 6px;text-align:center;border-bottom:2px solid {BORDER};">#</th>
-    <th style="padding:8px 6px;text-align:left;border-bottom:2px solid {BORDER};">Yarismacilar</th>
-    <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Portfoy</th>
+    <th style="padding:8px 6px;text-align:left;border-bottom:2px solid {BORDER};">Katılımcı</th>
+    <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Portföy</th>
     <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Vol.</th>
     <th style="padding:8px 6px;text-align:center;border-bottom:2px solid {BORDER};">Poz%</th>
     <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">MaxDD</th>
@@ -351,15 +347,12 @@ with tab1:
                 medal = sira_val
         else:
             medal = "—"
-        initial = row["isim"][0] if row["isim"] else "?"
-        ac = avatar_colors[idx % len(avatar_colors)] if not is_b else DIM
-        avatar = f'<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:{ac}22;border:2px solid {ac};text-align:center;line-height:22px;font-size:11px;font-weight:700;color:{ac};margin-right:6px;">{initial}</span>'
         pv = row["portfoy"]
         pv_c = renk(pv - 100 if pv else 0)
 
         tbl += f'<tr style="background:{bg_row};border-bottom:1px solid {BORDER}22;">'
         tbl += f'<td style="padding:6px;text-align:center;color:{DIM};">{medal}</td>'
-        tbl += f'<td style="padding:6px;{style_name}">{avatar}{row["isim"]}</td>'
+        tbl += f'<td style="padding:6px;{style_name}">{row["isim"]}</td>'
         if pv:
             tbl += f'<td style="padding:6px;text-align:right;font-family:Consolas,monospace;color:{pv_c};font-weight:600;">{pv:.2f}</td>'
         else:
@@ -424,7 +417,7 @@ with tab1:
                 vals_b.append(round(cum_b, 2))
             fig2.add_trace(go.Scatter(x=["Bas"] + p_labels, y=vals_b, name="BIST 100",
                 mode="lines", line=dict(color=MUTED, width=1.5, dash="dash")))
-        fig2.update_layout(**plotly_layout("Kumulatif Performans (Top 5)", 380))
+        fig2.update_layout(**plotly_layout("Kümülatif Performans (Top 5)", 380))
         st.plotly_chart(fig2, use_container_width=True)
 
 # ═══════════════════════════════════════════════
@@ -433,9 +426,9 @@ with tab1:
 with tab2:
     y_list = dfY["isim"].tolist()
     if not y_list:
-        st.warning("Yarismacilar bulunamadi.")
+        st.warning("Katılımcı bulunamadı.")
     else:
-        secili = st.selectbox("Yarismacilar sec", y_list, label_visibility="collapsed")
+        secili = st.selectbox("Katılımcı seç", y_list, label_visibility="collapsed")
         row_y = df[df["isim"] == secili].iloc[0]
 
         sayfa_key = None
@@ -471,13 +464,13 @@ with tab2:
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         with k1:
-            st.markdown(kpi_card("💰", "Portfoy", f"{pv:.2f}", f"Getiri: {getiri:+.2f}%", renk(getiri)), unsafe_allow_html=True)
+            st.markdown(kpi_card("💰", "Portföy", f"{pv:.2f}", f"Getiri: {getiri:+.2f}%", renk(getiri)), unsafe_allow_html=True)
         with k2:
             st.markdown(kpi_card("📊", "Getiri", f"{getiri:+.2f}%", "", renk(getiri)), unsafe_allow_html=True)
         with k3:
-            st.markdown(kpi_card("⚡", "En Iyi Periyot", f"{en_iyi:+.2f}%", "", GREEN), unsafe_allow_html=True)
+            st.markdown(kpi_card("⚡", "En İyi Periyot", f"{en_iyi:+.2f}%", "", GREEN), unsafe_allow_html=True)
         with k4:
-            st.markdown(kpi_card("💀", "En Kotu Periyot", f"{en_kotu:+.2f}%", "", RED), unsafe_allow_html=True)
+            st.markdown(kpi_card("💀", "En Kötü Periyot", f"{en_kotu:+.2f}%", "", RED), unsafe_allow_html=True)
         with k5:
             vol = row_y["vol"]
             st.markdown(kpi_card("📉", "Volatilite", f"{vol:.2f}" if vol else "—", "", CYAN), unsafe_allow_html=True)
@@ -510,7 +503,7 @@ with tab2:
                         v_b.append(round(c_b, 2))
                     fig3.add_trace(go.Scatter(x=["Bas"] + p_labels, y=v_b, name=bname,
                         mode="lines", line=dict(color=bcol, width=1.5, dash="dash")))
-            fig3.update_layout(**plotly_layout("Kumulatif Performans", 320))
+            fig3.update_layout(**plotly_layout("Kümülatif Performans", 320))
             st.plotly_chart(fig3, use_container_width=True)
 
         with g2:
@@ -523,20 +516,20 @@ with tab2:
                 dayaniklilik = max(0, min(100, 100 + mdd * 3))
                 getiri_r = max(0, min(100, getiri * 2 + 50))
 
-                cats = ["Getiri", "Istikrar", "Kazanma", "Sharpe", "Dayaniklilik"]
+                cats = ["Getiri", "İstikrar", "Kazanma", "Sharpe", "Dayanıklılık"]
                 vals_r = [getiri_r, istikrar, kazanma, sharpe, dayaniklilik]
 
                 fig4 = go.Figure()
                 fig4.add_trace(go.Scatterpolar(r=vals_r + [vals_r[0]], theta=cats + [cats[0]],
                     fill="toself", fillcolor="rgba(240,180,41,0.15)",
                     line=dict(color=GOLD, width=2), name=secili))
-                fig4.update_layout(**plotly_layout("Yetenek Radari", 320))
+                fig4.update_layout(**plotly_layout("Yetenek Radarı", 320))
                 fig4.update_layout(polar=dict(bgcolor=CARD,
                     radialaxis=dict(visible=True, range=[0, 100], gridcolor=BORDER, tickfont=dict(size=8, color=DIM)),
                     angularaxis=dict(gridcolor=BORDER, tickfont=dict(size=10, color=MUTED))))
                 st.plotly_chart(fig4, use_container_width=True)
             else:
-                st.info("Radar icin yeterli veri yok.")
+                st.info("Radar için yeterli veri yok.")
 
         g3, g4 = st.columns([2, 1])
         with g3:
@@ -567,7 +560,7 @@ with tab2:
 # ═══════════════════════════════════════════════
 with tab3:
     if not icmal:
-        st.warning("Hisse Icmal verisi bulunamadi.")
+        st.warning("Hisse İcmal verisi bulunamadı.")
     else:
         p_options = list(icmal.keys())
         secili_p = st.radio("Periyot", p_options, horizontal=True, label_visibility="collapsed")
@@ -580,9 +573,9 @@ with tab3:
 
         k1, k2 = st.columns(2)
         with k1:
-            st.markdown(kpi_card("📊", "Farkli Hisse", str(toplam_hisse), secili_p, BLUE), unsafe_allow_html=True)
+            st.markdown(kpi_card("📊", "Farklı Hisse", str(toplam_hisse), secili_p, BLUE), unsafe_allow_html=True)
         with k2:
-            st.markdown(kpi_card("💰", "Toplam TL", f"{toplam_tl:,.0f}", f"{len(dfY)} yarismacilar", GOLD), unsafe_allow_html=True)
+            st.markdown(kpi_card("💰", "Toplam TL", f"{toplam_tl:,.0f}", f"{len(dfY)} katılımcı", GOLD), unsafe_allow_html=True)
 
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
@@ -593,13 +586,13 @@ with tab3:
             labels = [i["hisse"] for i in top8]
             values = [i["tutar"] for i in top8]
             if diger_tl > 0:
-                labels.append("Diger")
+                labels.append("Diğer")
                 values.append(diger_tl)
             fig6 = go.Figure(go.Pie(labels=labels, values=values, hole=0.45,
                 marker=dict(colors=PAL[:len(labels)]),
                 textinfo="label+percent", textfont=dict(size=10, color=TEXT),
                 insidetextorientation="radial"))
-            fig6.update_layout(**plotly_layout(f"{secili_p} Hisse Dagilimi", 360))
+            fig6.update_layout(**plotly_layout(f"{secili_p} Hisse Dağılımı", 360))
             st.plotly_chart(fig6, use_container_width=True)
 
         with ig2:
@@ -607,7 +600,7 @@ with tab3:
             <tr style="color:{MUTED};border-bottom:2px solid {BORDER};font-size:10px;text-transform:uppercase;">
             <th style="padding:6px;text-align:left;">Hisse</th>
             <th style="padding:6px;text-align:right;">TL</th>
-            <th style="padding:6px;text-align:center;">Kisi</th>
+            <th style="padding:6px;text-align:center;">Kişi</th>
             <th style="padding:6px;text-align:left;">% Pay</th></tr>"""
             for ci, item in enumerate(items_data):
                 pay = item["pay"]
@@ -637,7 +630,7 @@ with tab4:
 
     s1, s2 = st.columns(2)
     with s1:
-        st.markdown(f'<div style="color:{GREEN};font-weight:600;font-size:14px;margin-bottom:8px;">🏆 En Iyi 10 Performans</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="color:{GREEN};font-weight:600;font-size:14px;margin-bottom:8px;">🏆 En İyi 10 Performans</div>', unsafe_allow_html=True)
         if not perf_df.empty:
             top10 = perf_df.sort_values("getiri", ascending=False).head(10)
             html = ""
@@ -650,7 +643,7 @@ with tab4:
             st.markdown(html, unsafe_allow_html=True)
 
     with s2:
-        st.markdown(f'<div style="color:{RED};font-weight:600;font-size:14px;margin-bottom:8px;">💀 En Kotu 10 Performans</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="color:{RED};font-weight:600;font-size:14px;margin-bottom:8px;">💀 En Kötü 10 Performans</div>', unsafe_allow_html=True)
         if not perf_df.empty:
             bot10 = perf_df.sort_values("getiri").head(10)
             html = ""
@@ -677,7 +670,7 @@ with tab4:
         fig7 = go.Figure()
         fig7.add_trace(go.Bar(x=p_labels, y=yenen, name="BIST'i Yenen", marker_color=GREEN, opacity=0.8))
         fig7.add_trace(go.Bar(x=p_labels, y=yenilen, name="BIST'e Yenilen", marker_color=RED, opacity=0.5))
-        fig7.update_layout(**plotly_layout("BIST 100'u Yenen Yarismacilar", 300))
+        fig7.update_layout(**plotly_layout("BIST 100'ü Yenen Katılımcılar", 300))
         fig7.update_layout(barmode="group")
         st.plotly_chart(fig7, use_container_width=True)
 
@@ -686,4 +679,4 @@ with tab4:
 # ═══════════════════════════════════════════════
 st.markdown(f"""<div style="text-align:center;padding:20px 0;border-top:1px solid {BORDER};
 margin-top:24px;color:{DIM};font-size:11px;">
-Sai Amator Yatirim &copy; 2026 — Dashboard v2</div>""", unsafe_allow_html=True)
+YGF &copy; 2026</div>""", unsafe_allow_html=True)
