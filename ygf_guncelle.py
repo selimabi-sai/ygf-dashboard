@@ -670,18 +670,23 @@ def main():
         print("    {} yarismacilar sayfalari guncellendi.".format(len(sonuclar)))
         log.info("Yarismacilar sayfalari guncellendi.")
 
-        # 9c) Siralama (sadece yarismacilar 6-16) + benchmark (18-20 sabit)
+        # 9c) Siralama + benchmark ayirma
         print("  Siralama guncelleniyor...")
         ana_vals = ws_ana.get_all_values()
-
-        # Sadece yarismaci satirlarini oku (6-16, 0-based 5-15)
         benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
         data_rows = []
-        for idx in range(5, 16):
+        bench_rows = {}
+
+        for idx in range(5, min(20, len(ana_vals))):
             row = ana_vals[idx]
-            padded = list(row[:13]) + [''] * (13 - len(row[:13]))
-            isim = padded[1]
+            if not row or not row[1].strip():
+                continue
+            padded = list(row[:13]) + [''] * max(0, 13 - len(row[:13]))
+            isim = padded[1].strip()
             if isim in benchmarks_set:
+                bench_rows[isim] = padded
+                continue
+            if not isim:
                 continue
             try:
                 pv = float(str(padded[2]).replace(',', '.'))
@@ -691,79 +696,148 @@ def main():
 
         data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
 
-        # Yarismaci satirlarini yaz (A6:M16, C/H/I bosalt)
+        # Satir 6-20 tamamen temizle
+        bos = [[''] * 13 for _ in range(15)]
+        ws_ana.update(values=bos, range_name="A6:M20", value_input_option="RAW")
+        time.sleep(1)
+
+        # Yarismacilar (satir 6-16)
         write_rows = []
-        for si, r in enumerate(data_rows):
+        for si, r in enumerate(data_rows[:11]):
             row = list(r["data"])
             row[0] = si + 1
-            row[2] = ''   # C: formul
-            row[7] = ''   # H: 6P formul
-            row[8] = ''   # I: 5P formul
+            row[2] = ''
+            row[7] = ''
+            row[8] = ''
             write_rows.append(row)
+        while len(write_rows) < 11:
+            write_rows.append([''] * 13)
         ws_ana.update(values=write_rows, range_name="A6:M16", value_input_option="USER_ENTERED")
-        time.sleep(2)
+        time.sleep(1)
 
-        # Yarismaci C + H + I formulleri (dinamik TOPLAM satiri)
+        # Benchmark (satir 18-20: BIST100, USDTRY, Faiz)
+        bench_order = ["BIST 100", "USDTRY", "Faiz"]
+        bench_write = []
+        for bname in bench_order:
+            if bname in bench_rows:
+                brow = list(bench_rows[bname])
+                brow[0] = "\u2014"
+                brow[2] = ''
+                brow[7] = ''
+                bench_write.append(brow)
+            else:
+                bench_write.append(["\u2014", bname] + [''] * 11)
+        ws_ana.update(values=bench_write, range_name="A18:M20", value_input_option="USER_ENTERED")
+        time.sleep(1)
+
+        # Formuller: C (portfoy), H (6P), I (5P) - dinamik TOPLAM satiri
         formula_batch = []
         aktif_baslik = "{}. Periyot".format(periyot_no)
         onceki_baslik = "{}. Periyot".format(periyot_no - 1) if periyot_no > 1 else None
-        for si, dr in enumerate(data_rows):
+
+        for si, dr in enumerate(data_rows[:11]):
             row_num = 6 + si
             isim_r = dr["isim"]
             sayfa_adi = isim_r
-            y_ws = None
             for title in ws_dict:
                 if isim_r in title or title in isim_r:
                     sayfa_adi = title
-                    y_ws = ws_dict[title]
                     break
-            try:
-                if y_ws:
-                    y_vals = y_ws.get_all_values()
-                    toplam_h = None
-                    onceki_toplam_f = None
-                    found_aktif = False
-                    found_onceki = False
-                    for yi, yrow in enumerate(y_vals):
-                        if aktif_baslik in str(yrow[0]):
-                            found_aktif = True
-                        if found_aktif and yrow[0] == "TOPLAM":
-                            toplam_h = yi + 1
-                            found_aktif = False
-                        if onceki_baslik and onceki_baslik in str(yrow[0]):
-                            found_onceki = True
-                        if found_onceki and yrow[0] == "TOPLAM":
-                            onceki_toplam_f = yi + 1
-                            found_onceki = False
-                    if toplam_h:
-                        formula_batch.append({"range": "C{}".format(row_num),
-                                              "values": [["='{}'!H{}".format(sayfa_adi, toplam_h)]]})
-                        formula_batch.append({"range": "H{}".format(row_num),
-                                              "values": [["='{}'!F{}".format(sayfa_adi, toplam_h)]]})
-                    if onceki_toplam_f:
-                        formula_batch.append({"range": "I{}".format(row_num),
-                                              "values": [["='{}'!F{}".format(sayfa_adi, onceki_toplam_f)]]})
-                    elif toplam_h:
-                        formula_batch.append({"range": "I{}".format(row_num), "values": [[""]]})
-                    time.sleep(0.5)
-            except Exception as e:
-                log.error("Formul yazma hatasi %s: %s", isim_r, e)
 
-        # Benchmark satirlari (18-20) — C formul, H sabit deger
-        # Periyot Getirileri'nden oku
-        pget_vals = ws_ana.get("E32:E34", value_render_option="FORMATTED_VALUE")
-        bist_6p = pget_vals[0][0].replace(",", ".").replace("%", "") if pget_vals[0] else ""
-        usd_6p = pget_vals[1][0].replace(",", ".").replace("%", "") if pget_vals[1] else ""
-        faiz_6p = pget_vals[2][0].replace(",", ".").replace("%", "") if pget_vals[2] else ""
-        # BIST 100 -> satir 18
-        formula_batch.append({"range": "C18", "values": [["=F26"]]})
-        formula_batch.append({"range": "H18", "values": [[bist_6p]]})
-        # USDTRY -> satir 19
-        formula_batch.append({"range": "C19", "values": [["=F27"]]})
-        formula_batch.append({"range": "H19", "values": [[usd_6p]]})
-        # Faiz -> satir 20
-        formula_batch.append({"range": "C20", "values": [["=F28"]]})
-        formula_batch.append({"range": "H20", "values": [[faiz_6p]]})
+            try:
+                y_ws = ws_dict.get(sayfa_adi)
+                if y_ws is None:
+                    continue
+                y_vals = y_ws.get_all_values()
+                toplam_h = None
+                toplam_f = None
+                onceki_f = None
+                found_a = False
+                found_o = False
+
+                for yi, yrow in enumerate(y_vals):
+                    if aktif_baslik in str(yrow[0]):
+                        found_a = True
+                        found_o = False
+                    if onceki_baslik and onceki_baslik in str(yrow[0]):
+                        found_o = True
+                        found_a = False
+                    if found_a and yrow[0] == "TOPLAM":
+                        toplam_h = yi + 1
+                        toplam_f = yi + 1
+                        found_a = False
+                    if found_o and yrow[0] == "TOPLAM":
+                        onceki_f = yi + 1
+                        found_o = False
+
+                if toplam_h:
+                    formula_batch.append({"range": "C{}".format(row_num),
+                        "values": [["='{}'!H{}".format(sayfa_adi, toplam_h)]]})
+                if toplam_f:
+                    formula_batch.append({"range": "H{}".format(row_num),
+                        "values": [["='{}'!F{}".format(sayfa_adi, toplam_f)]]})
+                if onceki_f:
+                    formula_batch.append({"range": "I{}".format(row_num),
+                        "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+                time.sleep(0.3)
+            except Exception as e:
+                log.error("Formul hatasi %s: %s", isim_r, e)
+
+        # Benchmark 6P getirileri — Kiyaslama Paneli Periyot Getirileri tablosundan oku
+        try:
+            for yi, yrow in enumerate(ana_vals):
+                if "PER" in str(yrow).upper() and "GET" in str(yrow).upper():
+                    for bi in range(yi + 2, min(yi + 6, len(ana_vals))):
+                        brow = ana_vals[bi]
+                        if not brow or not brow[0]:
+                            continue
+                        label = brow[0].strip().upper()
+                        gv = ""
+                        for ci in range(1, min(5, len(brow))):
+                            val = str(brow[ci]).replace(",", ".").replace("%", "").strip()
+                            try:
+                                float(val)
+                                gv = val
+                            except ValueError:
+                                pass
+                        if "BIST" in label and gv:
+                            formula_batch.append({"range": "H18", "values": [[gv]]})
+                        elif "USD" in label and gv:
+                            formula_batch.append({"range": "H19", "values": [[gv]]})
+                        elif "FA" in label and gv:
+                            formula_batch.append({"range": "H20", "values": [[gv]]})
+                    break
+        except Exception as e:
+            log.error("Benchmark getiri hatasi: %s", e)
+
+        # Benchmark C (Portfoy) — Kiyaslama Paneli YTD Tutar
+        try:
+            for yi, yrow in enumerate(ana_vals):
+                if "KIYASLAMA" in str(yrow).upper() or "YTD" in str(yrow).upper():
+                    for bi in range(yi + 2, min(yi + 6, len(ana_vals))):
+                        brow = ana_vals[bi]
+                        if not brow or not brow[0]:
+                            continue
+                        label = brow[0].strip().upper()
+                        tv = ""
+                        for ci in range(len(brow) - 1, 0, -1):
+                            val = str(brow[ci]).replace(",", ".").strip()
+                            try:
+                                fv = float(val)
+                                if fv > 50:
+                                    tv = val
+                                    break
+                            except ValueError:
+                                pass
+                        if "BIST" in label and tv:
+                            formula_batch.append({"range": "C18", "values": [[tv]]})
+                        elif "USD" in label and tv:
+                            formula_batch.append({"range": "C19", "values": [[tv]]})
+                        elif "FA" in label and tv:
+                            formula_batch.append({"range": "C20", "values": [[tv]]})
+                    break
+        except Exception as e:
+            log.error("Benchmark portfoy hatasi: %s", e)
 
         if formula_batch:
             ws_ana.batch_update(formula_batch, value_input_option="USER_ENTERED")
