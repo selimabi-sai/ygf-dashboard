@@ -731,52 +731,47 @@ def main():
         # Portföye göre büyükten küçüğe sırala
         data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
 
-        # Sıralı veriyi yaz (A=boş, H=boş, I=boş — formülle dolacak)
+        # Siralı veriyi yaz (A=sira no, H/I korunacak)
         write_rows = []
-        for r in data_rows:
-            row = list(r['data'])
-            row[0] = ''   # A: RANK formülü
-            row[7] = ''   # H: 6P formülü
-            row[8] = ''   # I: 5P formülü
+        for si, r in enumerate(data_rows):
+            row = list(r["data"])
+            row[0] = si + 1   # A: sabit sira numarasi
+            # H ve I sutunlarini koru (silme!)
             write_rows.append(row)
-        ws_ana.update(values=write_rows, range_name='A6:M19', value_input_option='RAW')
+        ws_ana.update(values=write_rows, range_name="A6:M19", value_input_option="USER_ENTERED")
         time.sleep(2)
 
-        # RANK formülleri (benchmark ayrımı yok)
-        rank_batch = []
-        for r in range(6, 20):
-            rank_batch.append({
-                "range": "A{}".format(r),
-                "values": [['=IF(B{r}="";"";\
-RANK(C{r};$C$6:$C$19;0))'.format(r=r)]]
-            })
-        ws_ana.batch_update(rank_batch, value_input_option="USER_ENTERED")
-
-        # 5P/6P formülleri
-        benchmarks_set = {'Faiz', 'BIST 100', 'USDTRY'}
+        # 5P/6P formuleri
+        benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
         fp_batch = []
         for si, dr in enumerate(data_rows):
             row_num = 6 + si
-            isim_r = dr['isim']
+            isim_r = dr["isim"]
             if isim_r in benchmarks_set:
-                # Benchmark: orijinal değerleri geri yaz
-                if dr['i_val'] not in ('', None):
-                    fp_batch.append({"range": "I{}".format(row_num), "values": [[dr['i_val']]]})
-                if dr['h_val'] not in ('', None):
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [[dr['h_val']]]})
+                # Benchmark 6P: Periyot Getirileri formulleri
+                if "BIST" in isim_r:
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);"")"]]})
+                elif isim_r == "Faiz":
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);"")"]]})
+                elif "USDTRY" in isim_r:
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);"")"]]})
             else:
-                # Yarışmacı: sayfa formülü
+                # Yarismaci: sayfa formulu
                 sayfa_adi = isim_r
                 for title in ws_dict:
                     if isim_r in title or title in isim_r:
                         sayfa_adi = title
                         break
+                # Aktif periyot TOPLAM F satiri
+                aktif_f = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
+                onceki_f = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_f
                 fp_batch.append({"range": "I{}".format(row_num),
-                                 "values": [["='{}'!F58".format(sayfa_adi)]]})
+                                 "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
                 fp_batch.append({"range": "H{}".format(row_num),
-                                 "values": [["='{}'!F69".format(sayfa_adi)]]})
+                                 "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
         if fp_batch:
             ws_ana.batch_update(fp_batch, value_input_option="USER_ENTERED")
+        time.sleep(1)
         time.sleep(1)
 
         # Ana Sayfa'yı yeniden oku (güncel haliyle)
