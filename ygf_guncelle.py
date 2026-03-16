@@ -730,12 +730,13 @@ def main():
         # Portföye göre büyükten küçüğe sırala
         data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
 
-        # Siralı veriyi yaz (A=sira no, H/I korunacak)
+        # Siralı veriyi yaz (A=sira no, H/I bosalt — formullerle yeniden yazilacak)
         write_rows = []
         for si, r in enumerate(data_rows):
             row = list(r["data"])
             row[0] = si + 1   # A: sabit sira numarasi
-            # H ve I sutunlarini koru (silme!)
+            row[7] = ''        # H: 6P — asagida formul yazilacak
+            row[8] = ''        # I: 5P — asagida formul yazilacak
             write_rows.append(row)
         ws_ana.update(values=write_rows, range_name="A6:M19", value_input_option="USER_ENTERED")
         time.sleep(2)
@@ -749,11 +750,14 @@ def main():
             if isim_r in benchmarks_set:
                 # Benchmark 6P: Periyot Getirileri formulleri
                 if "BIST" in isim_r:
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);"")"]]})
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);\"\")"]]})
                 elif isim_r == "Faiz":
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);"")"]]})
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);\"\")"]]})
                 elif "USDTRY" in isim_r:
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);"")"]]})
+                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);\"\")"]]})
+                # Benchmark 5P: orijinal degeri geri yaz
+                if dr['i_val'] not in ('', None):
+                    fp_batch.append({"range": "I{}".format(row_num), "values": [[dr['i_val']]]})
             else:
                 # Yarismaci: sayfa formulu
                 sayfa_adi = isim_r
