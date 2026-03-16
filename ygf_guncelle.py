@@ -675,16 +675,11 @@ def main():
         print("    {} yarismacilar sayfalari guncellendi.".format(len(sonuclar)))
         log.info("Yarismacilar sayfalari guncellendi.")
 
-        # 9c) Ana Sayfa C sütununu yarışmacı sayfalarındaki H TOPLAM formülleriyle bağla
+        # 9c) Ana Sayfa C sutununu yarismaci sayfalarindaki aktif periyot H TOPLAM ile bagla
         print("  Portfoy formulleri (H TOPLAM) yaziliyor...")
-        # Aktif periyot TOPLAM H satırı: 5 + 11*(periyot_no-1) + 9 = 11*periyot_no - 2
-        # Önceki periyot TOPLAM H satırı (fallback)
-        aktif_toplam = 11 * periyot_no - 2   # 6P→64? Hayır: 5+9=14, 16+9=25, ..., 60+9=69
-        # Doğru hesap: baslik = 5 + 11*(P-1), toplam = baslik + 9
-        aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 5+55+9=69 ✓
-        onceki_toplam = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_toplam
-
-        benchmarks_c = {'Faiz', 'BIST 100', 'USDTRY'}
+        # Blok yapisi sabit: TOPLAM satir = 5 + 11*(P-1) + 9 = 11*P + 3 - 9 + 9
+        aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
+        benchmarks_c = {"Faiz", "BIST 100", "USDTRY"}
         portfoy_batch = []
         for isim, _, _, _ in sonuclar:
             ana_row_h = None
@@ -699,17 +694,21 @@ def main():
                 if isim in title or title in isim:
                     sayfa_adi = title
                     break
-            # Formül: aktif periyot H TOPLAM > 0 ise onu al, yoksa önceki periyoda düş
-            formula = "=IF('{s}'!H{a}>0;'{s}'!H{a};'{s}'!H{p})".format(
-                s=sayfa_adi, a=aktif_toplam, p=onceki_toplam)
-            portfoy_batch.append({
-                "range": "C{}".format(ana_row_h),
-                "values": [[formula]]
-            })
+            formula = "='{}'!H{}".format(sayfa_adi, aktif_toplam)
+            portfoy_batch.append({"range": "C{}".format(ana_row_h), "values": [[formula]]})
+        # Benchmark portfoy: Kiyaslama Paneli Tutar hucreleri
+        for i_h, row_h in enumerate(ana_vals[5:19], start=6):
+            isim_h = row_h[1] if len(row_h) > 1 else ""
+            if "BIST" in isim_h:
+                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F26"]]})
+            elif isim_h == "Faiz":
+                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F28"]]})
+            elif "USDTRY" in isim_h:
+                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F27"]]})
         if portfoy_batch:
             ws_ana.batch_update(portfoy_batch, value_input_option="USER_ENTERED")
-            print("    {} yarismaci portfoy formulu yazildi (H{} -> H{} fallback).".format(
-                len(portfoy_batch), aktif_toplam, onceki_toplam))
+            print("    {} portfoy formulu yazildi (H{}).".format(len(portfoy_batch), aktif_toplam))
+            print("    {} portfoy formulu yazildi.".format(len(portfoy_batch)))
 
         # Sıralama güncelle — tüm satırları portföye göre fiziksel sırala
         print("  Siralama guncelleniyor...")
