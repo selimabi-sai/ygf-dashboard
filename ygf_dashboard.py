@@ -499,7 +499,9 @@ with tab2:
         with k1:
             st.markdown(kpi_card("💰", "Portföy", f"{pv:.2f}", f"Getiri: {getiri:+.2f}%", renk(getiri)), unsafe_allow_html=True)
         with k2:
-            st.markdown(kpi_card("📊", "Getiri", f"{getiri:+.2f}%", "", renk(getiri)), unsafe_allow_html=True)
+            son_p_val = row_y.get(f"{ap}P")
+            son_p_g = float(son_p_val) if son_p_val is not None else 0
+            st.markdown(kpi_card("📊", f"Aktif P.", f"{son_p_g:+.2f}%", f"{ap}P", renk(son_p_g)), unsafe_allow_html=True)
         with k3:
             st.markdown(kpi_card("⚡", "En İyi Periyot", f"{en_iyi:+.2f}%", "", GREEN), unsafe_allow_html=True)
         with k4:
