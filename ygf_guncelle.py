@@ -675,106 +675,75 @@ def main():
         print("    {} yarismacilar sayfalari guncellendi.".format(len(sonuclar)))
         log.info("Yarismacilar sayfalari guncellendi.")
 
-        # 9c) Ana Sayfa C sutununu yarismaci sayfalarindaki aktif periyot H TOPLAM ile bagla
-        print("  Portfoy formulleri (H TOPLAM) yaziliyor...")
-        # Blok yapisi sabit: TOPLAM satir = 5 + 11*(P-1) + 9 = 11*P + 3 - 9 + 9
-        aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
-        benchmarks_c = {"Faiz", "BIST 100", "USDTRY"}
-        portfoy_batch = []
-        for isim, _, _, _ in sonuclar:
-            ana_row_h = None
-            for i_h, row_h in enumerate(ana_vals):
-                if len(row_h) > 1 and isim in row_h[1]:
-                    ana_row_h = i_h + 1
-                    break
-            if ana_row_h is None:
-                continue
-            sayfa_adi = isim
-            for title in ws_dict:
-                if isim in title or title in isim:
-                    sayfa_adi = title
-                    break
-            formula = "='{}'!H{}".format(sayfa_adi, aktif_toplam)
-            portfoy_batch.append({"range": "C{}".format(ana_row_h), "values": [[formula]]})
-        # Benchmark portfoy: Kiyaslama Paneli Tutar hucreleri
-        for i_h, row_h in enumerate(ana_vals[5:19], start=6):
-            isim_h = row_h[1] if len(row_h) > 1 else ""
-            if "BIST" in isim_h:
-                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F26"]]})
-            elif isim_h == "Faiz":
-                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F28"]]})
-            elif "USDTRY" in isim_h:
-                portfoy_batch.append({"range": "C{}".format(i_h), "values": [["=F27"]]})
-        if portfoy_batch:
-            ws_ana.batch_update(portfoy_batch, value_input_option="USER_ENTERED")
-            print("    {} portfoy formulu yazildi (H{}).".format(len(portfoy_batch), aktif_toplam))
-            print("    {} portfoy formulu yazildi.".format(len(portfoy_batch)))
-
-        # Sıralama güncelle — tüm satırları portföye göre fiziksel sırala
+        # 9c) Siralama guncelle + C/H/I formullerini yaz
         print("  Siralama guncelleniyor...")
+        aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
+        aktif_f = aktif_toplam  # TOPLAM F satiri = TOPLAM H satiri
+        onceki_f = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_f
         ana_vals = ws_ana.get_all_values()
-        # Satır 6-19 verilerini oku (0-based 5-18)
+        # Satir 6-19 verilerini oku (0-based 5-18)
         data_rows = []
         for idx in range(5, 19):
             row = ana_vals[idx]
-            # C sütunu (index 2) portföy değeri
             try:
                 pv = float(str(row[2]).replace(',', '.'))
             except (ValueError, IndexError):
                 pv = 0.0
-            # 13 sütuna tamamla
             padded = list(row[:13]) + [''] * (13 - len(row[:13]))
             data_rows.append({'isim': padded[1], 'portfoy': pv, 'data': padded,
-                              'h_val': padded[7], 'i_val': padded[8]})
+                              'i_val': padded[8]})
 
-        # Portföye göre büyükten küçüğe sırala
+        # Portfoye gore buyukten kucuge sirala
         data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
 
-        # Siralı veriyi yaz (A=sira no, H/I bosalt — formullerle yeniden yazilacak)
+        # Sirali veriyi yaz (C/H/I bosalt — formullerle yazilacak)
         write_rows = []
         for si, r in enumerate(data_rows):
             row = list(r["data"])
-            row[0] = si + 1   # A: sabit sira numarasi
-            row[7] = ''        # H: 6P — asagida formul yazilacak
-            row[8] = ''        # I: 5P — asagida formul yazilacak
+            row[0] = si + 1
+            row[2] = ''   # C: portfoy formulu
+            row[7] = ''   # H: 6P formulu
+            row[8] = ''   # I: 5P formulu
             write_rows.append(row)
         ws_ana.update(values=write_rows, range_name="A6:M19", value_input_option="USER_ENTERED")
         time.sleep(2)
 
-        # 5P/6P formuleri
+        # C + H + I formullerini tek batch'te yaz
         benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
-        fp_batch = []
+        formula_batch = []
         for si, dr in enumerate(data_rows):
             row_num = 6 + si
             isim_r = dr["isim"]
             if isim_r in benchmarks_set:
-                # Benchmark 6P: Periyot Getirileri formulleri
+                # Benchmark C: Kiyaslama Paneli Tutar
                 if "BIST" in isim_r:
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);\"\")"]]})
+                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F26"]]})
+                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);\"\")"]]})
                 elif isim_r == "Faiz":
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);\"\")"]]})
+                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F28"]]})
+                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);\"\")"]]})
                 elif "USDTRY" in isim_r:
-                    fp_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);\"\")"]]})
+                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F27"]]})
+                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);\"\")"]]})
                 # Benchmark 5P: orijinal degeri geri yaz
                 if dr['i_val'] not in ('', None):
-                    fp_batch.append({"range": "I{}".format(row_num), "values": [[dr['i_val']]]})
+                    formula_batch.append({"range": "I{}".format(row_num), "values": [[dr['i_val']]]})
             else:
-                # Yarismaci: sayfa formulu
+                # Yarismaci C: sayfa H TOPLAM
                 sayfa_adi = isim_r
                 for title in ws_dict:
                     if isim_r in title or title in isim_r:
                         sayfa_adi = title
                         break
-                # Aktif periyot TOPLAM F satiri
-                aktif_f = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
-                onceki_f = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_f
-                fp_batch.append({"range": "I{}".format(row_num),
-                                 "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
-                fp_batch.append({"range": "H{}".format(row_num),
-                                 "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
-        if fp_batch:
-            ws_ana.batch_update(fp_batch, value_input_option="USER_ENTERED")
-        time.sleep(1)
+                formula_batch.append({"range": "C{}".format(row_num),
+                                      "values": [["='{}'!H{}".format(sayfa_adi, aktif_toplam)]]})
+                formula_batch.append({"range": "H{}".format(row_num),
+                                      "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
+                formula_batch.append({"range": "I{}".format(row_num),
+                                      "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+        if formula_batch:
+            ws_ana.batch_update(formula_batch, value_input_option="USER_ENTERED")
+            print("    {} formul yazildi (C/H/I).".format(len(formula_batch)))
         time.sleep(1)
 
         # Ana Sayfa'yı yeniden oku (güncel haliyle)
