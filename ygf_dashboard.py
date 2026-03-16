@@ -540,29 +540,25 @@ with tab2:
             st.plotly_chart(fig3, use_container_width=True)
 
         with g2:
-            if p_vals:
-                vol = row_y["vol"] or 5
-                mdd = row_y["maxdd"] or 0
-                istikrar = max(0, min(100, 100 - vol * 5))
-                kazanma = float(row_y["poz"]) if row_y["poz"] else 50
-                sharpe = max(0, min(100, (getiri / vol) * 10 + 50)) if vol > 0 else 50
-                dayaniklilik = max(0, min(100, 100 + mdd * 3))
-                getiri_r = max(0, min(100, getiri * 2 + 50))
-
-                cats = ["Getiri", "İstikrar", "Kazanma", "Sharpe", "Dayanıklılık"]
-                vals_r = [getiri_r, istikrar, kazanma, sharpe, dayaniklilik]
-
-                fig4 = go.Figure()
-                fig4.add_trace(go.Scatterpolar(r=vals_r + [vals_r[0]], theta=cats + [cats[0]],
-                    fill="toself", fillcolor="rgba(240,180,41,0.15)",
-                    line=dict(color=GOLD, width=2), name=secili))
-                fig4.update_layout(**plotly_layout("Radar", 320))
-                fig4.update_layout(polar=dict(bgcolor=CARD,
-                    radialaxis=dict(visible=True, range=[0, 100], gridcolor=BORDER, tickfont=dict(size=8, color=DIM)),
-                    angularaxis=dict(gridcolor=BORDER, tickfont=dict(size=10, color=MUTED))))
-                st.plotly_chart(fig4, use_container_width=True)
+            aktif_key = f"{ap}P"
+            aktif_blok = bloklar.get(aktif_key)
+            if aktif_blok and aktif_blok.get("hisseler"):
+                pie_data = [h for h in aktif_blok["hisseler"] if h["hisse"] != "TOPLAM" and h["tl"] and h["tl"] > 0]
+                if pie_data:
+                    pie_labels = [h["hisse"] for h in pie_data]
+                    pie_values = [h["tl"] for h in pie_data]
+                    fig4 = go.Figure(data=[go.Pie(
+                        labels=pie_labels, values=pie_values,
+                        hole=0.4, textinfo="label+percent",
+                        textfont=dict(size=11, color="#e2e8f0"),
+                    )])
+                    fig4.update_layout(**plotly_layout("Son Periyot Portföy Dağılımı", 320))
+                    fig4.update_layout(showlegend=False)
+                    st.plotly_chart(fig4, use_container_width=True)
+                else:
+                    st.info("Aktif periyotta portföy verisi yok.")
             else:
-                st.info("Radar için yeterli veri yok.")
+                st.info("Aktif periyotta portföy verisi yok.")
 
         g3, g4 = st.columns([2, 1])
         with g3:
