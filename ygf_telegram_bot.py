@@ -267,7 +267,7 @@ def portfoy_kaydet(isim, portfoy):
         yeni_start = son_toplam + 3  # 1-indexed
         satirlar = [
             ["\U0001f4c5 {}. Periyot".format(p_no), "", "", "", "", "", "", ""],
-            ["Hisse", "Agirlik %", "TL", "P.Basi Fiyat", "P.Sonu Fiyat", "Getiri %", "Katki %", "Tutar"],
+            ["Hisse", "Agirlik %", "TL", "P.Basi Fiyat", "P.Sonu Fiyat", "Getiri %", "", "Tutar"],
         ]
         for _ in range(5):
             satirlar.append(["", "", "", "", "", "", "", ""])
@@ -359,21 +359,11 @@ def portfoy_kaydet(isim, portfoy):
                 "range": "F{}".format(row_1idx),
                 "values": [['=IFERROR(ROUND((E{n}-D{n})/D{n}*100;2);"")'.format(n=row_1idx)]]
             })
-            # G: Katkı formülü
-            formul_updates.append({
-                "range": "G{}".format(row_1idx),
-                "values": [['=IFERROR(ROUND(F{n}*C{n}/C{t};2);"")'.format(n=row_1idx, t=toplam_row_1idx)]]
-            })
         else:
             # NAKİT: F sütununa 14 günlük net faiz getirisi formülü
             formul_updates.append({
                 "range": "F{}".format(row_1idx),
                 "values": [['=ROUND(((1+0,428*(1-0,175)/365)^14-1)*100;2)']]
-            })
-            # G: Katkı formülü (NAKİT için de)
-            formul_updates.append({
-                "range": "G{}".format(row_1idx),
-                "values": [['=IFERROR(ROUND(F{n}*C{n}/C{t};2);"")'.format(n=row_1idx, t=toplam_row_1idx)]]
             })
 
         # H: Tutar formülü (tüm hisseler için, NAKİT dahil)
@@ -395,14 +385,10 @@ def portfoy_kaydet(isim, portfoy):
         "range": "B{}".format(toplam_row_1idx),
         "values": [["100%"]]
     })
-    # TOPLAM F ve G: portföy toplam getirisi
+    # TOPLAM F: portföy toplam getirisi
     formul_updates.append({
         "range": "F{}".format(toplam_row_1idx),
-        "values": [["=SUM(G{}:G{})".format(ilk_hisse_1, son_hisse_1)]]
-    })
-    formul_updates.append({
-        "range": "G{}".format(toplam_row_1idx),
-        "values": [["=SUM(G{}:G{})".format(ilk_hisse_1, son_hisse_1)]]
+        "values": [['=IFERROR(ROUND((H{t}-C{t})/C{t}*100;2);"")'.format(t=toplam_row_1idx)]]
     })
     # H TOPLAM: Tutar toplamı
     formul_updates.append({

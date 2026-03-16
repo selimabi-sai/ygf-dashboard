@@ -641,12 +641,7 @@ def main():
                 elif h["getiri"] is not None and not pd.isna(h["getiri"]):
                     formul_updates.append({
                         "range": "F{}".format(row_1idx),
-                        "values": [[tr_format(h["getiri"])]]
-                    })
-                if h["katki"] is not None and not pd.isna(h["katki"]):
-                    formul_updates.append({
-                        "range": "G{}".format(row_1idx),
-                        "values": [[tr_format(h["katki"])]]
+                        "values": [[round(h["getiri"], 2)]]
                     })
 
             y_vals = target_ws.get_all_values()
@@ -663,7 +658,7 @@ def main():
             if toplam_row and p_getiri is not None and not pd.isna(p_getiri):
                 formul_updates.append({
                     "range": "F{}".format(toplam_row),
-                    "values": [[tr_format(p_getiri)]]
+                    "values": [[round(p_getiri, 2)]]
                 })
 
             if cells:
@@ -677,9 +672,6 @@ def main():
 
         # 9c) Siralama (sadece yarismacilar 6-16) + benchmark (18-20 sabit)
         print("  Siralama guncelleniyor...")
-        aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
-        aktif_f = aktif_toplam
-        onceki_f = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_f
         ana_vals = ws_ana.get_all_values()
 
         # Sadece yarismaci satirlarini oku (6-16, 0-based 5-15)
@@ -711,22 +703,51 @@ def main():
         ws_ana.update(values=write_rows, range_name="A6:M16", value_input_option="USER_ENTERED")
         time.sleep(2)
 
-        # Yarismaci C + H + I formulleri
+        # Yarismaci C + H + I formulleri (dinamik TOPLAM satiri)
         formula_batch = []
+        aktif_baslik = "{}. Periyot".format(periyot_no)
+        onceki_baslik = "{}. Periyot".format(periyot_no - 1) if periyot_no > 1 else None
         for si, dr in enumerate(data_rows):
             row_num = 6 + si
             isim_r = dr["isim"]
             sayfa_adi = isim_r
+            y_ws = None
             for title in ws_dict:
                 if isim_r in title or title in isim_r:
                     sayfa_adi = title
+                    y_ws = ws_dict[title]
                     break
-            formula_batch.append({"range": "C{}".format(row_num),
-                                  "values": [["='{}'!H{}".format(sayfa_adi, aktif_toplam)]]})
-            formula_batch.append({"range": "H{}".format(row_num),
-                                  "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
-            formula_batch.append({"range": "I{}".format(row_num),
-                                  "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+            try:
+                if y_ws:
+                    y_vals = y_ws.get_all_values()
+                    toplam_h = None
+                    onceki_toplam_f = None
+                    found_aktif = False
+                    found_onceki = False
+                    for yi, yrow in enumerate(y_vals):
+                        if aktif_baslik in str(yrow[0]):
+                            found_aktif = True
+                        if found_aktif and yrow[0] == "TOPLAM":
+                            toplam_h = yi + 1
+                            found_aktif = False
+                        if onceki_baslik and onceki_baslik in str(yrow[0]):
+                            found_onceki = True
+                        if found_onceki and yrow[0] == "TOPLAM":
+                            onceki_toplam_f = yi + 1
+                            found_onceki = False
+                    if toplam_h:
+                        formula_batch.append({"range": "C{}".format(row_num),
+                                              "values": [["='{}'!H{}".format(sayfa_adi, toplam_h)]]})
+                        formula_batch.append({"range": "H{}".format(row_num),
+                                              "values": [["='{}'!F{}".format(sayfa_adi, toplam_h)]]})
+                    if onceki_toplam_f:
+                        formula_batch.append({"range": "I{}".format(row_num),
+                                              "values": [["='{}'!F{}".format(sayfa_adi, onceki_toplam_f)]]})
+                    elif toplam_h:
+                        formula_batch.append({"range": "I{}".format(row_num), "values": [[""]]})
+                    time.sleep(0.5)
+            except Exception as e:
+                log.error("Formul yazma hatasi %s: %s", isim_r, e)
 
         # Benchmark satirlari (18-20) — C formul, H sabit deger
         # Periyot Getirileri'nden oku
