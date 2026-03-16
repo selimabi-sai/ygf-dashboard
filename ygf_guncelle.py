@@ -675,75 +675,78 @@ def main():
         print("    {} yarismacilar sayfalari guncellendi.".format(len(sonuclar)))
         log.info("Yarismacilar sayfalari guncellendi.")
 
-        # 9c) Siralama guncelle + C/H/I formullerini yaz
+        # 9c) Siralama (sadece yarismacilar 6-16) + benchmark (18-20 sabit)
         print("  Siralama guncelleniyor...")
         aktif_toplam = 5 + 11 * (periyot_no - 1) + 9  # 6P: 69
-        aktif_f = aktif_toplam  # TOPLAM F satiri = TOPLAM H satiri
+        aktif_f = aktif_toplam
         onceki_f = 5 + 11 * (periyot_no - 2) + 9 if periyot_no > 1 else aktif_f
         ana_vals = ws_ana.get_all_values()
-        # Satir 6-19 verilerini oku (0-based 5-18)
+
+        # Sadece yarismaci satirlarini oku (6-16, 0-based 5-15)
+        benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
         data_rows = []
-        for idx in range(5, 19):
+        for idx in range(5, 16):
             row = ana_vals[idx]
+            padded = list(row[:13]) + [''] * (13 - len(row[:13]))
+            isim = padded[1]
+            if isim in benchmarks_set:
+                continue
             try:
-                pv = float(str(row[2]).replace(',', '.'))
+                pv = float(str(padded[2]).replace(',', '.'))
             except (ValueError, IndexError):
                 pv = 0.0
-            padded = list(row[:13]) + [''] * (13 - len(row[:13]))
-            data_rows.append({'isim': padded[1], 'portfoy': pv, 'data': padded,
-                              'i_val': padded[8]})
+            data_rows.append({'isim': isim, 'portfoy': pv, 'data': padded})
 
-        # Portfoye gore buyukten kucuge sirala
         data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
 
-        # Sirali veriyi yaz (C/H/I bosalt — formullerle yazilacak)
+        # Yarismaci satirlarini yaz (A6:M16, C/H/I bosalt)
         write_rows = []
         for si, r in enumerate(data_rows):
             row = list(r["data"])
             row[0] = si + 1
-            row[2] = ''   # C: portfoy formulu
-            row[7] = ''   # H: 6P formulu
-            row[8] = ''   # I: 5P formulu
+            row[2] = ''   # C: formul
+            row[7] = ''   # H: 6P formul
+            row[8] = ''   # I: 5P formul
             write_rows.append(row)
-        ws_ana.update(values=write_rows, range_name="A6:M19", value_input_option="USER_ENTERED")
+        ws_ana.update(values=write_rows, range_name="A6:M16", value_input_option="USER_ENTERED")
         time.sleep(2)
 
-        # C + H + I formullerini tek batch'te yaz
-        benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
+        # Yarismaci C + H + I formulleri
         formula_batch = []
         for si, dr in enumerate(data_rows):
             row_num = 6 + si
             isim_r = dr["isim"]
-            if isim_r in benchmarks_set:
-                # Benchmark C: Kiyaslama Paneli Tutar
-                if "BIST" in isim_r:
-                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F26"]]})
-                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D32-C32)/C32*100;2);\"\")"]]})
-                elif isim_r == "Faiz":
-                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F28"]]})
-                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND(D34-100;2);\"\")"]]})
-                elif "USDTRY" in isim_r:
-                    formula_batch.append({"range": "C{}".format(row_num), "values": [["=F27"]]})
-                    formula_batch.append({"range": "H{}".format(row_num), "values": [["=IFERROR(ROUND((D33-C33)/C33*100;2);\"\")"]]})
-                # Benchmark 5P: orijinal degeri geri yaz
-                if dr['i_val'] not in ('', None):
-                    formula_batch.append({"range": "I{}".format(row_num), "values": [[dr['i_val']]]})
-            else:
-                # Yarismaci C: sayfa H TOPLAM
-                sayfa_adi = isim_r
-                for title in ws_dict:
-                    if isim_r in title or title in isim_r:
-                        sayfa_adi = title
-                        break
-                formula_batch.append({"range": "C{}".format(row_num),
-                                      "values": [["='{}'!H{}".format(sayfa_adi, aktif_toplam)]]})
-                formula_batch.append({"range": "H{}".format(row_num),
-                                      "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
-                formula_batch.append({"range": "I{}".format(row_num),
-                                      "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+            sayfa_adi = isim_r
+            for title in ws_dict:
+                if isim_r in title or title in isim_r:
+                    sayfa_adi = title
+                    break
+            formula_batch.append({"range": "C{}".format(row_num),
+                                  "values": [["='{}'!H{}".format(sayfa_adi, aktif_toplam)]]})
+            formula_batch.append({"range": "H{}".format(row_num),
+                                  "values": [["='{}'!F{}".format(sayfa_adi, aktif_f)]]})
+            formula_batch.append({"range": "I{}".format(row_num),
+                                  "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+
+        # Benchmark satirlari (18-20) — C formul, H sabit deger
+        # Periyot Getirileri'nden oku
+        pget_vals = ws_ana.get("E32:E34", value_render_option="FORMATTED_VALUE")
+        bist_6p = pget_vals[0][0].replace(",", ".").replace("%", "") if pget_vals[0] else ""
+        usd_6p = pget_vals[1][0].replace(",", ".").replace("%", "") if pget_vals[1] else ""
+        faiz_6p = pget_vals[2][0].replace(",", ".").replace("%", "") if pget_vals[2] else ""
+        # BIST 100 -> satir 18
+        formula_batch.append({"range": "C18", "values": [["=F26"]]})
+        formula_batch.append({"range": "H18", "values": [[bist_6p]]})
+        # USDTRY -> satir 19
+        formula_batch.append({"range": "C19", "values": [["=F27"]]})
+        formula_batch.append({"range": "H19", "values": [[usd_6p]]})
+        # Faiz -> satir 20
+        formula_batch.append({"range": "C20", "values": [["=F28"]]})
+        formula_batch.append({"range": "H20", "values": [[faiz_6p]]})
+
         if formula_batch:
             ws_ana.batch_update(formula_batch, value_input_option="USER_ENTERED")
-            print("    {} formul yazildi (C/H/I).".format(len(formula_batch)))
+            print("    {} formul/deger yazildi.".format(len(formula_batch)))
         time.sleep(1)
 
         # Ana Sayfa'yı yeniden oku (güncel haliyle)
@@ -911,7 +914,7 @@ def main():
                         # Yeni sütun verilerini hazırla
                         yeni_col_data = [yeni_p_label]  # Satır 5: başlık
                         formul_sayac = 0
-                        for row_idx in range(5, 19):  # Satır 6-19 (0-based 5-18)
+                        for row_idx in range(5, 20):  # Satır 6-20 (0-based 5-19)
                             row_data = ana_vals[row_idx]
                             isim_cell = row_data[1] if len(row_data) > 1 else ""
                             if isim_cell in benchmarks_set or not isim_cell:
@@ -1013,7 +1016,7 @@ def main():
     faiz_str = ""
     bist_yenen = 0
     bist_getiri = 0.0
-    for row in ana_vals[5:19]:  # Sadece yarışmacı/benchmark satırları (6-19)
+    for row in ana_vals[5:20]:  # Yarismaci (6-16) + benchmark (18-20)
         if len(row) > 1 and "BIST" in row[1]:
             pv = parse_tr_float(row[2])
             if pv is not None:
