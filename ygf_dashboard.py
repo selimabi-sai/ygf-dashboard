@@ -372,14 +372,10 @@ with tab1:
         bg_row = f"{SURFACE}88" if is_b else "transparent"
         style_name = f"font-style:italic;color:{DIM};" if is_b else f"color:{TEXT};"
         sira_val = row["sira"]
-        if not is_b:
-            try:
-                s = int(float(sira_val))
-                medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(s, str(s))
-            except (ValueError, TypeError):
-                medal = sira_val
-        else:
-            medal = "—"
+        try:
+            medal = str(int(float(sira_val)))
+        except (ValueError, TypeError):
+            medal = str(sira_val)
         pv = row["portfoy"]
         pv_c = renk(pv - 100 if pv else 0)
 

@@ -331,26 +331,63 @@ def main():
         basi_tarih.strftime("%Y-%m-%d"), p_basi.strftime("%Y-%m-%d")))
     log.info("Periyot basi PD tarihi: %s", basi_tarih.strftime("%Y-%m-%d"))
 
-    # ── 4) snap_bugun_pd oku (bugünün PD'si) ──
+    # ── 4) Bugünün PD'si — snap_bugun_pd veya bisttum_pd'den güncel olanı al ──
+    # Kaynak 1: snap_bugun_pd_{tarih}.xlsx
     snap_dosya = os.path.join(VERILER_KLASOR, "snap_bugun_pd_{}.xlsx".format(bugun_str))
-    if not os.path.exists(snap_dosya):
-        # En yeni snap dosyasını bul
-        snap_files = sorted(glob.glob(os.path.join(VERILER_KLASOR, "snap_bugun_pd_*.xlsx")))
-        if not snap_files:
-            print("\n  [HATA] Hicbir snap_bugun_pd dosyasi bulunamadi!")
-            log.error("snap_bugun_pd dosyasi bulunamadi!")
-            return
-        snap_dosya = snap_files[-1]
-        snap_tarih = os.path.basename(snap_dosya).replace("snap_bugun_pd_", "").replace(".xlsx", "")
-        print("  [UYARI] Bugunun snap dosyasi yok, en yenisi kullaniliyor: {}".format(snap_tarih))
+    snap_tarih_dt = None
+    df_snap = None
+    if os.path.exists(snap_dosya):
+        snap_tarih_dt = bugun
     else:
-        snap_tarih = bugun_str
+        snap_files = sorted(glob.glob(os.path.join(VERILER_KLASOR, "snap_bugun_pd_*.xlsx")))
+        if snap_files:
+            snap_dosya = snap_files[-1]
+            snap_tarih_str = os.path.basename(snap_dosya).replace("snap_bugun_pd_", "").replace(".xlsx", "")
+            try:
+                snap_tarih_dt = datetime.strptime(snap_tarih_str, "%Y-%m-%d")
+            except ValueError:
+                snap_tarih_dt = None
 
-    df_bugun = pd.read_excel(snap_dosya, sheet_name="PD", index_col=0)
-    # Tek sütun — ilk sütunu al
-    bugun_col = df_bugun.columns[0]
-    print("  Gunluk PD dosyasi: snap_bugun_pd_{}.xlsx".format(snap_tarih))
-    log.info("Snap dosyasi: %s", snap_tarih)
+    if snap_tarih_dt and os.path.exists(snap_dosya):
+        df_snap = pd.read_excel(snap_dosya, sheet_name="PD", index_col=0)
+
+    # Kaynak 2: bisttum_pd.xlsx son sütunu
+    bisttum_son_tarih_dt = None
+    df_bisttum_son = None
+    if not tarih_listesi:
+        pass
+    else:
+        bisttum_son_tarih_dt = max(tarih_listesi)
+        df_bisttum_son = df_pd[[bisttum_son_tarih_dt]]
+
+    # Hangisi daha güncel?
+    kaynak = "yok"
+    if snap_tarih_dt and bisttum_son_tarih_dt:
+        snap_d = snap_tarih_dt if isinstance(snap_tarih_dt, datetime) else datetime(snap_tarih_dt.year, snap_tarih_dt.month, snap_tarih_dt.day)
+        bist_d = bisttum_son_tarih_dt if isinstance(bisttum_son_tarih_dt, datetime) else datetime(bisttum_son_tarih_dt.year, bisttum_son_tarih_dt.month, bisttum_son_tarih_dt.day)
+        if snap_d >= bist_d:
+            df_bugun = df_snap
+            bugun_col = df_bugun.columns[0]
+            kaynak = "snap ({})".format(snap_d.strftime("%Y-%m-%d"))
+        else:
+            df_bugun = df_bisttum_son
+            bugun_col = bisttum_son_tarih_dt
+            kaynak = "bisttum ({})".format(bist_d.strftime("%Y-%m-%d"))
+    elif snap_tarih_dt:
+        df_bugun = df_snap
+        bugun_col = df_bugun.columns[0]
+        kaynak = "snap ({})".format(snap_tarih_dt.strftime("%Y-%m-%d"))
+    elif bisttum_son_tarih_dt:
+        df_bugun = df_bisttum_son
+        bugun_col = bisttum_son_tarih_dt
+        kaynak = "bisttum ({})".format(bisttum_son_tarih_dt.strftime("%Y-%m-%d"))
+    else:
+        print("\n  [HATA] Ne snap ne bisttum PD verisi bulunamadi!")
+        log.error("PD verisi bulunamadi!")
+        return
+
+    print("  P.Sonu kaynak: {}".format(kaynak))
+    log.info("P.Sonu kaynak: %s", kaynak)
 
     # ── 5) Google Sheets bağlan ──
     creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -597,7 +634,7 @@ def main():
 
             # C sütunu (portfoy) artık 9c'de H TOPLAM'dan yazılıyor
             if periyot_col_no is not None:
-                ana_cells.append(gspread.Cell(ana_row, periyot_col_no, tr_format(p_getiri)))
+                ana_cells.append(gspread.Cell(ana_row, periyot_col_no, float(round(p_getiri, 2))))
 
         if ana_cells:
             ws_ana.update_cells(ana_cells)
@@ -624,14 +661,21 @@ def main():
             if target_ws is None:
                 continue
 
+            # Sayfayi oku (P.Basi kontrolu icin)
+            y_vals = target_ws.get_all_values()
+
             cells = []
             formul_updates = []
             for h in hisse_detay:
                 row_1idx = h["row"] + 1
-                if h["basi_pd"] and not pd.isna(h["basi_pd"]):
-                    cells.append(gspread.Cell(row_1idx, 4, round(h["basi_pd"], 2)))
+                # P.Basi: SADECE bos ise yaz (mevcut degeri ezme)
+                mevcut_pbasi = ""
+                if h["row"] < len(y_vals) and len(y_vals[h["row"]]) > 3:
+                    mevcut_pbasi = str(y_vals[h["row"]][3]).strip()
+                if not mevcut_pbasi and h["basi_pd"] and not pd.isna(h["basi_pd"]):
+                    cells.append(gspread.Cell(row_1idx, 4, float(round(h["basi_pd"], 2))))
                 if h["sonu_pd"] and not pd.isna(h["sonu_pd"]):
-                    cells.append(gspread.Cell(row_1idx, 5, round(h["sonu_pd"], 2)))
+                    cells.append(gspread.Cell(row_1idx, 5, float(round(h["sonu_pd"], 2))))
                 # NAKİT: F sütununa faiz formülü, diğerleri: getiri değeri
                 if h["hisse"].upper() in ("NAKİT", "NAKIT"):
                     formul_updates.append({
@@ -641,10 +685,9 @@ def main():
                 elif h["getiri"] is not None and not pd.isna(h["getiri"]):
                     formul_updates.append({
                         "range": "F{}".format(row_1idx),
-                        "values": [[round(h["getiri"], 2)]]
+                        "values": [[float(round(h["getiri"], 2))]]
                     })
 
-            y_vals = target_ws.get_all_values()
             periyot_baslik = "{}. Periyot".format(periyot_no)
             toplam_row = None
             found_block = False
@@ -658,7 +701,7 @@ def main():
             if toplam_row and p_getiri is not None and not pd.isna(p_getiri):
                 formul_updates.append({
                     "range": "F{}".format(toplam_row),
-                    "values": [[round(p_getiri, 2)]]
+                    "values": [[float(round(p_getiri, 2))]]
                 })
 
             if cells:
@@ -670,181 +713,97 @@ def main():
         print("    {} yarismacilar sayfalari guncellendi.".format(len(sonuclar)))
         log.info("Yarismacilar sayfalari guncellendi.")
 
-        # 9c) Siralama + benchmark ayirma
-        print("  Siralama guncelleniyor...")
-        ana_vals = ws_ana.get_all_values()
+        # 9c) Formul yaz + sortRange (V7)
+        # Benchmark sayfalari artik yarismacilarla ayni yapida, formulleri otomatik.
+        # Script sadece Ana Sayfa'da C + periyot formulleri yazar, sonra native sort.
+        print("  Formuller ve siralama guncelleniyor...")
         benchmarks_set = {"Faiz", "BIST 100", "USDTRY"}
-        data_rows = []
-        bench_rows = {}
+
+        # Worksheetleri yeniden oku (benchmark sayfalari dahil)
+        ws_dict_fresh = {}
+        for ws_item in ss.worksheets():
+            ws_dict_fresh[ws_item.title] = ws_item
+
+        ana_vals = ws_ana.get_all_values()
+        formula_batch = []
+        sorted_periyots = sorted(periyot_map.keys(), reverse=True)
 
         for idx in range(5, min(20, len(ana_vals))):
             row = ana_vals[idx]
-            if not row or not row[1].strip():
+            if not row or len(row) < 2:
                 continue
-            padded = list(row[:13]) + [''] * max(0, 13 - len(row[:13]))
-            isim = padded[1].strip()
-            if isim in benchmarks_set:
-                bench_rows[isim] = padded
-                continue
+            isim = str(row[1]).strip()
             if not isim:
                 continue
-            try:
-                pv = float(str(padded[2]).replace(',', '.'))
-            except (ValueError, IndexError):
-                pv = 0.0
-            data_rows.append({'isim': isim, 'portfoy': pv, 'data': padded})
+            row_num = idx + 1
 
-        data_rows.sort(key=lambda x: x['portfoy'], reverse=True)
-
-        # Satir 6-20 tamamen temizle
-        bos = [[''] * 13 for _ in range(15)]
-        ws_ana.update(values=bos, range_name="A6:M20", value_input_option="RAW")
-        time.sleep(1)
-
-        # Yarismacilar (satir 6-16)
-        write_rows = []
-        for si, r in enumerate(data_rows[:11]):
-            row = list(r["data"])
-            row[0] = si + 1
-            row[2] = ''
-            row[7] = ''
-            row[8] = ''
-            write_rows.append(row)
-        while len(write_rows) < 11:
-            write_rows.append([''] * 13)
-        ws_ana.update(values=write_rows, range_name="A6:M16", value_input_option="USER_ENTERED")
-        time.sleep(1)
-
-        # Benchmark (satir 18-20: BIST100, USDTRY, Faiz)
-        bench_order = ["BIST 100", "USDTRY", "Faiz"]
-        bench_write = []
-        for bname in bench_order:
-            if bname in bench_rows:
-                brow = list(bench_rows[bname])
-                brow[0] = "\u2014"
-                brow[2] = ''
-                brow[7] = ''
-                bench_write.append(brow)
-            else:
-                bench_write.append(["\u2014", bname] + [''] * 11)
-        ws_ana.update(values=bench_write, range_name="A18:M20", value_input_option="USER_ENTERED")
-        time.sleep(1)
-
-        # Formuller: C (portfoy), H (6P), I (5P) - dinamik TOPLAM satiri
-        formula_batch = []
-        aktif_baslik = "{}. Periyot".format(periyot_no)
-        onceki_baslik = "{}. Periyot".format(periyot_no - 1) if periyot_no > 1 else None
-
-        for si, dr in enumerate(data_rows[:11]):
-            row_num = 6 + si
-            isim_r = dr["isim"]
-            sayfa_adi = isim_r
-            for title in ws_dict:
-                if isim_r in title or title in isim_r:
+            sayfa_adi = None
+            for title in ws_dict_fresh:
+                if isim == title or isim in title or title in isim:
                     sayfa_adi = title
                     break
+            if not sayfa_adi:
+                continue
+
+            y_ws = ws_dict_fresh.get(sayfa_adi)
+            if not y_ws:
+                continue
 
             try:
-                y_ws = ws_dict.get(sayfa_adi)
-                if y_ws is None:
-                    continue
                 y_vals = y_ws.get_all_values()
-                toplam_h = None
-                toplam_f = None
-                onceki_f = None
-                found_a = False
-                found_o = False
 
-                for yi, yrow in enumerate(y_vals):
-                    if aktif_baslik in str(yrow[0]):
-                        found_a = True
-                        found_o = False
-                    if onceki_baslik and onceki_baslik in str(yrow[0]):
-                        found_o = True
-                        found_a = False
-                    if found_a and yrow[0] == "TOPLAM":
-                        toplam_h = yi + 1
-                        toplam_f = yi + 1
-                        found_a = False
-                    if found_o and yrow[0] == "TOPLAM":
-                        onceki_f = yi + 1
-                        found_o = False
-
-                if toplam_h:
-                    formula_batch.append({"range": "C{}".format(row_num),
-                        "values": [["='{}'!H{}".format(sayfa_adi, toplam_h)]]})
-                if toplam_f:
-                    formula_batch.append({"range": "H{}".format(row_num),
-                        "values": [["='{}'!F{}".format(sayfa_adi, toplam_f)]]})
-                if onceki_f:
-                    formula_batch.append({"range": "I{}".format(row_num),
-                        "values": [["='{}'!F{}".format(sayfa_adi, onceki_f)]]})
+                for p in [periyot_no]:  # Sadece aktif periyot
+                    p_baslik = "{}. Periyot".format(p)
+                    found = False
+                    for yi, yrow in enumerate(y_vals):
+                        cell0 = str(yrow[0]) if yrow else ""
+                        if p_baslik in cell0:
+                            found = True
+                        if found and cell0.strip() == "TOPLAM":
+                            toplam_row = yi + 1
+                            col_idx = periyot_map.get(p)
+                            if col_idx is not None:
+                                cl = chr(65 + col_idx)
+                                formula_batch.append({"range": "{}{}".format(cl, row_num),
+                                    "values": [["='{}'!F{}".format(sayfa_adi, toplam_row)]]})
+                            if p == periyot_no:
+                                formula_batch.append({"range": "C{}".format(row_num),
+                                    "values": [["='{}'!H{}".format(sayfa_adi, toplam_row)]]})
+                            found = False
+                            break
                 time.sleep(0.3)
             except Exception as e:
-                log.error("Formul hatasi %s: %s", isim_r, e)
-
-        # Benchmark 6P getirileri — Kiyaslama Paneli Periyot Getirileri tablosundan oku
-        try:
-            for yi, yrow in enumerate(ana_vals):
-                if "PER" in str(yrow).upper() and "GET" in str(yrow).upper():
-                    for bi in range(yi + 2, min(yi + 6, len(ana_vals))):
-                        brow = ana_vals[bi]
-                        if not brow or not brow[0]:
-                            continue
-                        label = brow[0].strip().upper()
-                        gv = ""
-                        for ci in range(1, min(5, len(brow))):
-                            val = str(brow[ci]).replace(",", ".").replace("%", "").strip()
-                            try:
-                                float(val)
-                                gv = val
-                            except ValueError:
-                                pass
-                        if "BIST" in label and gv:
-                            formula_batch.append({"range": "H18", "values": [[gv]]})
-                        elif "USD" in label and gv:
-                            formula_batch.append({"range": "H19", "values": [[gv]]})
-                        elif "FA" in label and gv:
-                            formula_batch.append({"range": "H20", "values": [[gv]]})
-                    break
-        except Exception as e:
-            log.error("Benchmark getiri hatasi: %s", e)
-
-        # Benchmark C (Portfoy) — Kiyaslama Paneli YTD Tutar
-        try:
-            for yi, yrow in enumerate(ana_vals):
-                if "KIYASLAMA" in str(yrow).upper() or "YTD" in str(yrow).upper():
-                    for bi in range(yi + 2, min(yi + 6, len(ana_vals))):
-                        brow = ana_vals[bi]
-                        if not brow or not brow[0]:
-                            continue
-                        label = brow[0].strip().upper()
-                        tv = ""
-                        for ci in range(len(brow) - 1, 0, -1):
-                            val = str(brow[ci]).replace(",", ".").strip()
-                            try:
-                                fv = float(val)
-                                if fv > 50:
-                                    tv = val
-                                    break
-                            except ValueError:
-                                pass
-                        if "BIST" in label and tv:
-                            formula_batch.append({"range": "C18", "values": [[tv]]})
-                        elif "USD" in label and tv:
-                            formula_batch.append({"range": "C19", "values": [[tv]]})
-                        elif "FA" in label and tv:
-                            formula_batch.append({"range": "C20", "values": [[tv]]})
-                    break
-        except Exception as e:
-            log.error("Benchmark portfoy hatasi: %s", e)
+                log.error("Formul hatasi %s: %s", isim, e)
 
         if formula_batch:
             ws_ana.batch_update(formula_batch, value_input_option="USER_ENTERED")
-            print("    {} formul/deger yazildi.".format(len(formula_batch)))
+            print("    {} formul yazildi.".format(len(formula_batch)))
+        time.sleep(3)
+
+        # Son veri satirini bul (bos olmayan son satir)
+        son_veri_satir = 5  # minimum (header)
+        for idx_sv in range(5, len(ana_vals)):
+            if ana_vals[idx_sv] and len(ana_vals[idx_sv]) > 1 and str(ana_vals[idx_sv][1]).strip():
+                son_veri_satir = idx_sv + 1  # 1-indexed
+        sort_end_row = son_veri_satir  # endRowIndex = son dolu satir
+
+        # Sheets native sort: A-M arasi C'ye gore
+        ana_sheet_id = ws_ana.id
+        ss.batch_update({"requests": [{
+            "sortRange": {
+                "range": {
+                    "sheetId": ana_sheet_id,
+                    "startRowIndex": 5,
+                    "endRowIndex": sort_end_row,
+                    "startColumnIndex": 0,   # A'dan basla (# dahil)
+                    "endColumnIndex": 13     # M'ye kadar
+                },
+                "sortSpecs": [{"dimensionIndex": 2, "sortOrder": "DESCENDING"}]
+            }
+        }]})
+        print("    sortRange tamamlandi (B-M, A sabit).")
         time.sleep(1)
 
-        # Ana Sayfa'yı yeniden oku (güncel haliyle)
         ana_vals = ws_ana.get_all_values()
 
         # 9d) Hisse İcmal güncelle
@@ -1209,8 +1168,12 @@ def main():
         print("  PAZAR GUNCELLEME: Yeni periyot baslangic degerleri")
         print("-" * 55)
 
+        # Sonraki periyot numarasi
+        sonraki_p = periyot_no + 1 if bugun.weekday() == 6 else periyot_no
+        biten_p = sonraki_p - 1
+
         try:
-            # C33:C34 = Google Finance Cuma kapanis (hafta sonu da Cuma kapanisi gosterir)
+            # C33:C34 = Google Finance Cuma kapanis
             panel_vals = ws_ana.get("C33:C34", value_render_option="UNFORMATTED_VALUE")
             if panel_vals and len(panel_vals) >= 2:
                 bist_guncel = panel_vals[0][0] if panel_vals[0] else None
@@ -1225,11 +1188,112 @@ def main():
                     log.info("Pazar guncelleme: BIST=%.2f, USDTRY=%.4f", bist_guncel, usd_guncel)
                 else:
                     print("  [UYARI] Panel degerleri okunamadi")
+                    bist_guncel = None
+                    usd_guncel = None
             else:
                 print("  [UYARI] Panel hucreleri bos")
+                bist_guncel = None
+                usd_guncel = None
         except Exception as e:
             print("  [HATA] Pazar guncelleme hatasi: {}".format(e))
             log.error("Pazar guncelleme hatasi: %s", e)
+            bist_guncel = None
+            usd_guncel = None
+
+        # ── Benchmark sayfalari periyot gecisi ──
+        # Biten periyodun formullerini sabitle, yeni periyot blogu hazirla
+        # Satir haritasi: P{n} data = 5n, TOPLAM = 5n+1 (1-indexed)
+        if biten_p >= 1:
+            print("\n  Benchmark periyot gecisi: {}P biter → {}P baslar".format(
+                biten_p, sonraki_p))
+
+            bench_config = {
+                "BIST 100": {"pbasi": bist_guncel, "psonu_ref": "='Ana Sayfa'!$D$31"},
+                "USDTRY":   {"pbasi": usd_guncel,  "psonu_ref": "='Ana Sayfa'!$D$32"},
+                "Faiz":     {"pbasi": None,         "psonu_ref": None},
+            }
+
+            # Faiz getirisi hesapla (brut=0.428, stopaj=0.175, 14 gun)
+            # TODO: Faiz sayfasindaki hesaplama tablosundan brüt oran okunabilir
+            faiz_brut = 0.428
+            faiz_stopaj = 0.175
+            faiz_getiri = round(((1 + faiz_brut * (1 - faiz_stopaj) / 365) ** 14 - 1) * 100, 2)
+            bench_config["Faiz"]["getiri"] = faiz_getiri
+
+            for bname, bcfg in bench_config.items():
+                target_ws = None
+                for title, ws_obj in ws_dict.items():
+                    if title == bname:
+                        target_ws = ws_obj
+                        break
+                if target_ws is None:
+                    # Yeniden oku (benchmark_setup sonrasi eklenmis olabilir)
+                    try:
+                        target_ws = ss.worksheet(bname)
+                    except Exception:
+                        print("    [UYARI] {} sayfasi bulunamadi, atlaniyor.".format(bname))
+                        continue
+
+                biten_data = 5 * biten_p       # data row (1-indexed)
+                biten_toplam = 5 * biten_p + 1  # TOPLAM row
+                yeni_data = 5 * sonraki_p
+                yeni_toplam = 5 * sonraki_p + 1
+                biten_toplam_ref = biten_toplam  # onceki TOPLAM H satiri
+
+                # 1) Biten periyodun formullerini sabitle
+                # Data + TOPLAM satirlarini UNFORMATTED oku, RAW geri yaz
+                try:
+                    freeze_range = "A{}:H{}".format(biten_data, biten_toplam)
+                    frozen = target_ws.get(freeze_range,
+                                          value_render_option="UNFORMATTED_VALUE")
+                    if frozen and not kuru:
+                        target_ws.update(values=frozen, range_name=freeze_range,
+                                        value_input_option="RAW")
+                    print("    {} {}P sabitlendi.".format(bname, biten_p))
+                except Exception as e:
+                    print("    [HATA] {} {}P sabitleme: {}".format(bname, biten_p, e))
+                    log.error("Benchmark sabitleme %s %dP: %s", bname, biten_p, e)
+
+                time.sleep(0.5)
+
+                # 2) Yeni periyot blogu hazirla
+                updates = []
+                if bcfg["psonu_ref"]:
+                    # BIST / USD — P.Basi + canli formuller
+                    if bcfg["pbasi"]:
+                        updates.append({"range": "D{}".format(yeni_data),
+                                        "values": [[bcfg["pbasi"]]]})
+                    updates.append({"range": "E{}".format(yeni_data),
+                                    "values": [[bcfg["psonu_ref"]]]})
+                    updates.append({"range": "F{}".format(yeni_data),
+                                    "values": [["=(E{0}-D{0})/D{0}*100".format(yeni_data)]]})
+                else:
+                    # Faiz — sabit getiri
+                    updates.append({"range": "F{}".format(yeni_data),
+                                    "values": [[bcfg["getiri"]]]})
+
+                # G = F (katki)
+                updates.append({"range": "G{}".format(yeni_data),
+                                "values": [["=F{}".format(yeni_data)]]})
+                # H = onceki TOPLAM H * (1 + F/100)
+                updates.append({"range": "H{}".format(yeni_data),
+                                "values": [["=H{}*(1+F{}/100)".format(
+                                    biten_toplam_ref, yeni_data)]]})
+                # TOPLAM satiri
+                updates.append({"range": "C{}".format(yeni_toplam),
+                                "values": [["=H{}".format(yeni_data)]]})
+                updates.append({"range": "F{}".format(yeni_toplam),
+                                "values": [["=F{}".format(yeni_data)]]})
+                updates.append({"range": "H{}".format(yeni_toplam),
+                                "values": [["=H{}".format(yeni_data)]]})
+
+                if updates and not kuru:
+                    target_ws.batch_update(updates, value_input_option="USER_ENTERED")
+                print("    {} {}P hazir. P.Basi={}, data={}, TOPLAM={}".format(
+                    bname, sonraki_p,
+                    bcfg.get("pbasi", bcfg.get("getiri", "")),
+                    yeni_data, yeni_toplam))
+                time.sleep(0.5)
 
     print("=" * 55)
 
