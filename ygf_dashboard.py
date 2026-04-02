@@ -702,7 +702,7 @@ with tab2:
             <table style="width:100%;font-size:11px;border-collapse:collapse;">
             <tr style="color:{MUTED};border-bottom:1px solid {BORDER};position:sticky;top:0;background:{CARD};">
             <th style="padding:4px;text-align:left;">Periyot</th><th style="padding:4px;text-align:right;">Getiri</th></tr>"""
-            for p in range(26, 0, -1):
+            for p in range(1, 27):
                 lbl = f"{p}P"
                 v = row_y.get(lbl)
                 aktif_satir = p == ap
