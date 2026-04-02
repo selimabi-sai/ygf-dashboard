@@ -262,7 +262,8 @@ def parse_yarismaci(vals, p_no):
             if not h:
                 continue
             hisseler.append({
-                "hisse": h, "tl": pf(vals[r][2]) or 0,
+                "hisse": h, "agirlik": pf(vals[r][1]),
+                "tl": pf(vals[r][2]) or 0,
                 "getiri": pf(vals[r][5]), "katki": pf(vals[r][6]),
                 "tutar": pf(vals[r][7]) if len(vals[r]) > 7 else None,
             })
@@ -511,6 +512,12 @@ with tab2:
 
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
+        aktif_key = f"{ap}P"
+        aktif_blok = bloklar.get(aktif_key)
+        aktif_hisseler = []
+        if aktif_blok and aktif_blok.get("hisseler"):
+            aktif_hisseler = [h for h in aktif_blok["hisseler"] if h["hisse"] != "TOPLAM"][:7]
+
         g1, g2 = st.columns(2)
         with g1:
             fig3 = go.Figure()
@@ -537,11 +544,32 @@ with tab2:
             fig3.update_layout(**plotly_layout("Kümülatif Performans", 320))
             st.plotly_chart(fig3, use_container_width=True)
 
+            if aktif_hisseler:
+                secim_tbl = f"""<div style="margin-top:10px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:11px;">
+                <thead><tr style="background:{BG2};color:{MUTED};font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">
+                <th style="padding:7px 8px;text-align:left;border-bottom:1px solid {BORDER};">Hisse</th>
+                <th style="padding:7px 8px;text-align:right;border-bottom:1px solid {BORDER};">% Ağırlık</th>
+                <th style="padding:7px 8px;text-align:right;border-bottom:1px solid {BORDER};">Son % Getiri</th>
+                </tr></thead><tbody>"""
+                for item in aktif_hisseler:
+                    agirlik = item.get("agirlik")
+                    getiri_h = item.get("getiri")
+                    getiri_renk = renk(getiri_h if getiri_h is not None else 0)
+                    agirlik_txt = f"{agirlik:.1f}%" if agirlik is not None else "—"
+                    getiri_txt = f"{getiri_h:+.2f}%" if getiri_h is not None else "—"
+                    secim_tbl += f"""<tr style="border-bottom:1px solid {BORDER}22;">
+                    <td style="padding:7px 8px;color:{TEXT};font-weight:600;">{item['hisse']}</td>
+                    <td style="padding:7px 8px;text-align:right;color:{MUTED};font-family:Consolas,monospace;">{agirlik_txt}</td>
+                    <td style="padding:7px 8px;text-align:right;color:{getiri_renk};font-family:Consolas,monospace;font-weight:600;">{getiri_txt}</td>
+                    </tr>"""
+                secim_tbl += "</tbody></table></div>"
+                st.markdown(secim_tbl, unsafe_allow_html=True)
+            else:
+                st.info("Aktif periyot secim verisi yok.")
+
         with g2:
-            aktif_key = f"{ap}P"
-            aktif_blok = bloklar.get(aktif_key)
-            if aktif_blok and aktif_blok.get("hisseler"):
-                pie_data = [h for h in aktif_blok["hisseler"] if h["hisse"] != "TOPLAM" and h["tl"] and h["tl"] > 0]
+            if aktif_hisseler:
+                pie_data = [h for h in aktif_hisseler if h["tl"] and h["tl"] > 0]
                 if pie_data:
                     pie_labels = [h["hisse"] for h in pie_data]
                     pie_values = [h["tl"] for h in pie_data]
