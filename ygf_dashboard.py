@@ -6,9 +6,11 @@ YGF DASHBOARD v2
 streamlit run ygf_dashboard.py
 """
 
-import json, math
+import json, math, re
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 import streamlit as st
 import pandas as pd
@@ -120,6 +122,29 @@ def pf(v):
     except ValueError:
         return None
 
+def pf_yerel(v):
+    if v is None or str(v).strip() == "":
+        return None
+    s = str(v).strip()
+    s = s.replace("₺", "").replace("TL", "").replace("%", "").replace("\xa0", "").replace(" ", "")
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+def fmt_tr(v, digits=2):
+    if v is None:
+        return "—"
+    s = f"{v:,.{digits}f}"
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
 def renk(v):
     if v is None: return MUTED
     return GREEN if v > 0 else RED if v < 0 else MUTED
@@ -142,6 +167,83 @@ def kpi_card(icon, label, value, sub="", color=TEXT):
     <div style="font-size:10px;color:{DIM};text-transform:uppercase;letter-spacing:1px;margin:4px 0 2px;">{label}</div>
     <div style="font-size:22px;font-weight:700;font-family:Consolas,monospace;color:{color};">{value}</div>
     <div style="font-size:11px;color:{MUTED};margin-top:2px;">{sub}</div></div>"""
+
+def hucre(vals, row_no, col_no):
+    if not vals or row_no < 1 or col_no < 1 or row_no > len(vals):
+        return None
+    row = vals[row_no - 1]
+    if col_no > len(row):
+        return None
+    return row[col_no - 1]
+
+def gram_altin_baz_fiyat(usdtry_vals):
+    v = pf_yerel(hucre(usdtry_vals, 4, 10))
+    if v is not None:
+        return v
+    if not usdtry_vals:
+        return None
+    hedef = "gram altın"
+    for r_idx, row in enumerate(usdtry_vals):
+        for c_idx, cell in enumerate(row):
+            if str(cell).strip().casefold() != hedef:
+                continue
+            for offset in (1, 2):
+                rr = r_idx + offset
+                if rr < len(usdtry_vals) and c_idx < len(usdtry_vals[rr]):
+                    v = pf_yerel(usdtry_vals[rr][c_idx])
+                    if v is not None:
+                        return v
+    return None
+
+@st.cache_data(ttl=900)
+def google_finance_gram_altin_fiyat(baz_fiyat=None):
+    try:
+        req = Request(
+            "https://www.google.com/finance/quote/XAUTRY:CUR?hl=tr",
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept-Language": "tr-TR,tr;q=0.9",
+            },
+        )
+        with urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", "ignore")
+    except Exception:
+        return None
+
+    fiyatlar = re.findall(r'<div class="YMlKec">([^<]+)', html)
+    if not fiyatlar:
+        return None
+
+    sayac = Counter(fiyatlar)
+    hedef = baz_fiyat * 1.10 if baz_fiyat else 6500.0
+    adaylar = []
+    for raw in fiyatlar:
+        val = pf_yerel(raw)
+        if val is None:
+            continue
+        adaylar.append({
+            "raw": raw,
+            "val": val,
+            "count": sayac[raw],
+            "is_try": ("₺" in raw) or ("TL" in raw),
+        })
+
+    tercihler = [
+        [a for a in adaylar if (not a["is_try"]) and a["count"] == 1 and 1000 <= a["val"] <= 10000],
+        [a for a in adaylar if (not a["is_try"]) and 1000 <= a["val"] <= 10000],
+        [a for a in adaylar if a["is_try"] and a["count"] == 1 and 1000 <= a["val"] <= 10000],
+    ]
+    for grup in tercihler:
+        if grup:
+            return min(grup, key=lambda a: abs(a["val"] - hedef))["val"]
+    return None
+
+def gram_altin_verisi(detay):
+    usdtry_vals = detay.get("USDTRY") if detay else None
+    baz = gram_altin_baz_fiyat(usdtry_vals)
+    guncel = google_finance_gram_altin_fiyat(baz)
+    ytd = ((guncel / baz) - 1) * 100 if baz and guncel else None
+    return baz, guncel, ytd
 
 # ═══════════════════════════════════════════════
 # VERİ YÜKLEME
@@ -322,6 +424,7 @@ faiz_row = df[df["isim"] == "Faiz"].iloc[0] if "Faiz" in df["isim"].values else 
 usd_row = df[df["isim"] == "USDTRY"].iloc[0] if "USDTRY" in df["isim"].values else None
 lider = dfY.sort_values("portfoy", ascending=False).iloc[0] if not dfY.empty else None
 karda = len(dfY[dfY["portfoy"] > 100]) if not dfY.empty else 0
+gram_baz, gram_guncel, gram_ytd = gram_altin_verisi(detay)
 
 # ═══════════════════════════════════════════════
 # SEKMELER
@@ -349,8 +452,14 @@ with tab1:
         st.markdown(kpi_card("🏦", "Faiz", f"{fv:.2f}" if fv else "—",
             f"YTD: {fv-100:+.2f}%" if fv else "", renk(fv-100 if fv else 0)), unsafe_allow_html=True)
     with k5:
-        st.markdown(kpi_card("👥", "Katılımcılar", str(len(dfY)),
-            f"Kârda: {karda}/{len(dfY)}", GREEN if karda > len(dfY)//2 else RED), unsafe_allow_html=True)
+        gram_sub = "Google Finance verisi bekleniyor"
+        if gram_baz is not None and gram_ytd is not None:
+            gram_sub = f"31.12.25: {fmt_tr(gram_baz)} TL<br>YTD: {gram_ytd:+.2f}%"
+        elif gram_baz is not None:
+            gram_sub = f"31.12.25: {fmt_tr(gram_baz)} TL"
+        gram_value = f"{fmt_tr(gram_guncel)} TL" if gram_guncel is not None else "—"
+        st.markdown(kpi_card("🥇", "Gram Altın", gram_value,
+            gram_sub, renk(gram_ytd if gram_ytd is not None else 0)), unsafe_allow_html=True)
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
@@ -585,29 +694,23 @@ with tab2:
                     st.info("Aktif periyotta portföy verisi yok.")
             else:
                 st.info("Aktif periyotta portföy verisi yok.")
-
-        g3, g4 = st.columns([2, 1])
-        with g3:
-            if p_vals:
-                y_vals_bar = [row_y.get(l) or 0 for l in p_labels]
-                b_vals_bar = [bist_row.get(l) or 0 for l in p_labels] if bist_row is not None else [0]*len(p_labels)
-                fig5 = go.Figure()
-                fig5.add_trace(go.Bar(x=p_labels, y=y_vals_bar, name=secili, marker_color=GOLD, opacity=0.9))
-                fig5.add_trace(go.Bar(x=p_labels, y=b_vals_bar, name="BIST 100", marker_color=MUTED, opacity=0.5))
-                fig5.update_layout(**plotly_layout("Periyot Getirileri", 280))
-                fig5.update_layout(barmode="group")
-                st.plotly_chart(fig5, use_container_width=True)
-
-        with g4:
-            karne = f"""<table style="width:100%;font-size:11px;border-collapse:collapse;">
-            <tr style="color:{MUTED};border-bottom:1px solid {BORDER};">
-            <th style="padding:4px;">Periyot</th><th style="padding:4px;text-align:right;">Getiri</th></tr>"""
-            for lbl in reversed(p_labels):
+            karne = f"""<div style="margin-top:10px;overflow-x:auto;max-height:360px;">
+            <table style="width:100%;font-size:11px;border-collapse:collapse;">
+            <tr style="color:{MUTED};border-bottom:1px solid {BORDER};position:sticky;top:0;background:{CARD};">
+            <th style="padding:4px;text-align:left;">Periyot</th><th style="padding:4px;text-align:right;">Getiri</th></tr>"""
+            for p in range(26, 0, -1):
+                lbl = f"{p}P"
                 v = row_y.get(lbl)
+                aktif_satir = p == ap
+                row_bg = f"background:{ACCENT}14;" if aktif_satir else ""
                 if v is not None:
                     c = renk(v)
-                    karne += f'<tr style="border-bottom:1px solid {BORDER}22;"><td style="padding:4px;color:{MUTED};">{lbl}</td><td style="padding:4px;text-align:right;font-family:Consolas;color:{c};">{v:+.2f}%</td></tr>'
-            karne += "</table>"
+                    val_txt = f"{v:+.2f}%"
+                else:
+                    c = DIM
+                    val_txt = "—"
+                karne += f'<tr style="border-bottom:1px solid {BORDER}22;{row_bg}"><td style="padding:4px;color:{TEXT if aktif_satir else MUTED};">{lbl}</td><td style="padding:4px;text-align:right;font-family:Consolas;color:{c};font-weight:{"600" if aktif_satir else "400"};">{val_txt}</td></tr>'
+            karne += "</table></div>"
             st.markdown(karne, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════
