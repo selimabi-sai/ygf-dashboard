@@ -635,12 +635,17 @@ with tab2:
         with g1:
             fig3 = go.Figure()
             vals_y = [100]
-            cum = 100
             for lbl in p_labels:
+                blok = bloklar.get(lbl)
+                tutar = blok.get("tutar") if blok else None
+                if tutar is not None:
+                    vals_y.append(round(tutar, 2))
+                    continue
+                onceki = vals_y[-1]
                 v = row_y.get(lbl)
                 if v is not None:
-                    cum *= (1 + v / 100)
-                vals_y.append(round(cum, 2))
+                    onceki *= (1 + v / 100)
+                vals_y.append(round(onceki, 2))
             fig3.add_trace(go.Scatter(x=["Bas"] + p_labels, y=vals_y, name=secili,
                 mode="lines+markers", line=dict(color=GOLD, width=3), marker=dict(size=6)))
             for brow, bname, bcol in [(bist_row, "BIST 100", MUTED), (faiz_row, "Faiz", DIM), (usd_row, "USDTRY", CYAN)]:
