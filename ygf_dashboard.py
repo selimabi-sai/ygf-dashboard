@@ -177,20 +177,29 @@ def hucre(vals, row_no, col_no):
     return row[col_no - 1]
 
 def gram_altin_baz_fiyat(usdtry_vals):
+    if not usdtry_vals:
+        return None
+
     v = pf_yerel(hucre(usdtry_vals, 4, 10))
     if v is not None:
         return v
-    if not usdtry_vals:
-        return None
-    hedef = "gram altın"
+
     for r_idx, row in enumerate(usdtry_vals):
         for c_idx, cell in enumerate(row):
-            if str(cell).strip().casefold() != hedef:
+            metin = str(cell).strip().casefold()
+            if "gram alt" not in metin:
                 continue
-            for offset in (1, 2):
+            for offset in (1, 2, 3):
                 rr = r_idx + offset
-                if rr < len(usdtry_vals) and c_idx < len(usdtry_vals[rr]):
-                    v = pf_yerel(usdtry_vals[rr][c_idx])
+                if rr >= len(usdtry_vals):
+                    continue
+                hedef_row = usdtry_vals[rr]
+                if c_idx < len(hedef_row):
+                    v = pf_yerel(hedef_row[c_idx])
+                    if v is not None:
+                        return v
+                for col_idx in range(len(hedef_row) - 1, -1, -1):
+                    v = pf_yerel(hedef_row[col_idx])
                     if v is not None:
                         return v
     return None
@@ -242,8 +251,8 @@ def gram_altin_verisi(detay):
     usdtry_vals = detay.get("USDTRY") if detay else None
     baz = gram_altin_baz_fiyat(usdtry_vals)
     guncel = google_finance_gram_altin_fiyat(baz)
-    ytd = ((guncel / baz) - 1) * 100 if baz and guncel else None
-    return baz, guncel, ytd
+    endeks = (guncel / baz) * 100 if baz and guncel else None
+    return baz, guncel, endeks
 
 # ═══════════════════════════════════════════════
 # VERİ YÜKLEME
@@ -424,7 +433,7 @@ faiz_row = df[df["isim"] == "Faiz"].iloc[0] if "Faiz" in df["isim"].values else 
 usd_row = df[df["isim"] == "USDTRY"].iloc[0] if "USDTRY" in df["isim"].values else None
 lider = dfY.sort_values("portfoy", ascending=False).iloc[0] if not dfY.empty else None
 karda = len(dfY[dfY["portfoy"] > 100]) if not dfY.empty else 0
-gram_baz, gram_guncel, gram_ytd = gram_altin_verisi(detay)
+gram_baz, gram_guncel, gram_endeks = gram_altin_verisi(detay)
 
 # ═══════════════════════════════════════════════
 # SEKMELER
@@ -442,24 +451,19 @@ with tab1:
     with k2:
         bv = bist_row["portfoy"] if bist_row is not None else 0
         st.markdown(kpi_card("📈", "BIST 100", f"{bv:.2f}" if bv else "—",
-            f"YTD: {bv-100:+.2f}%" if bv else "", renk(bv-100 if bv else 0)), unsafe_allow_html=True)
+            "", renk(bv-100 if bv else 0)), unsafe_allow_html=True)
     with k3:
         uv = usd_row["portfoy"] if usd_row is not None else 0
         st.markdown(kpi_card("💵", "USDTRY", f"{uv:.2f}" if uv else "—",
-            f"YTD: {uv-100:+.2f}%" if uv else "", renk(uv-100 if uv else 0)), unsafe_allow_html=True)
+            "", renk(uv-100 if uv else 0)), unsafe_allow_html=True)
     with k4:
         fv = faiz_row["portfoy"] if faiz_row is not None else 0
         st.markdown(kpi_card("🏦", "Faiz", f"{fv:.2f}" if fv else "—",
-            f"YTD: {fv-100:+.2f}%" if fv else "", renk(fv-100 if fv else 0)), unsafe_allow_html=True)
+            "", renk(fv-100 if fv else 0)), unsafe_allow_html=True)
     with k5:
-        gram_sub = "Google Finance verisi bekleniyor"
-        if gram_baz is not None and gram_ytd is not None:
-            gram_sub = f"31.12.25: {fmt_tr(gram_baz)} TL<br>YTD: {gram_ytd:+.2f}%"
-        elif gram_baz is not None:
-            gram_sub = f"31.12.25: {fmt_tr(gram_baz)} TL"
-        gram_value = f"{fmt_tr(gram_guncel)} TL" if gram_guncel is not None else "—"
+        gram_value = f"{gram_endeks:.2f}" if gram_endeks is not None else "—"
         st.markdown(kpi_card("🥇", "Gram Altın", gram_value,
-            gram_sub, renk(gram_ytd if gram_ytd is not None else 0)), unsafe_allow_html=True)
+            "", renk(gram_endeks - 100 if gram_endeks is not None else 0)), unsafe_allow_html=True)
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
