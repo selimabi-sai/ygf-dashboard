@@ -468,16 +468,22 @@ with tab1:
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     # Sıralama tablosu
-    tbl = f"""<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:12px;">
+    aktif_lbl = f"{ap}P"
+    eski_periodler = [lbl for lbl in reversed(p_labels) if lbl != aktif_lbl]
+    min_table_px = 860 + (max(len(p_labels), 7) * 72)
+    tbl = f"""<div style="overflow-x:auto;padding-bottom:4px;"><table style="min-width:{min_table_px}px;width:max-content;border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:12px;white-space:nowrap;">
     <thead><tr style="background:{BG2};color:{MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
     <th style="padding:8px 6px;text-align:center;border-bottom:2px solid {BORDER};">#</th>
     <th style="padding:8px 6px;text-align:left;border-bottom:2px solid {BORDER};">Katılımcı</th>
-    <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Portföy</th>
+    <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Portföy</th>"""
+    if aktif_lbl in p_labels:
+        tbl += f'<th style="padding:8px 4px;text-align:right;border-bottom:2px solid {BORDER};">{aktif_lbl}</th>'
+    tbl += f"""
     <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Vol.</th>
     <th style="padding:8px 6px;text-align:center;border-bottom:2px solid {BORDER};">Poz%</th>
     <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">MaxDD</th>
     <th style="padding:8px 6px;text-align:right;border-bottom:2px solid {BORDER};">Alfa</th>"""
-    for lbl in reversed(p_labels):
+    for lbl in eski_periodler:
         tbl += f'<th style="padding:8px 4px;text-align:right;border-bottom:2px solid {BORDER};">{lbl}</th>'
     tbl += "</tr></thead><tbody>"
 
@@ -501,6 +507,14 @@ with tab1:
         else:
             tbl += f'<td style="padding:6px;text-align:right;color:{DIM};">—</td>'
 
+        if aktif_lbl in p_labels:
+            aktif_v = row.get(aktif_lbl)
+            if aktif_v is not None:
+                aktif_c = renk(aktif_v)
+                tbl += f'<td style="padding:6px;text-align:right;font-family:Consolas,monospace;color:{aktif_c};font-weight:600;font-size:11px;">{aktif_v:+.2f}</td>'
+            else:
+                tbl += f'<td style="padding:6px;text-align:right;color:{DIM};font-size:11px;">—</td>'
+
         for col_name in ["vol", "poz", "maxdd", "alfa"]:
             v = row[col_name]
             if v is not None:
@@ -512,7 +526,7 @@ with tab1:
             else:
                 tbl += f'<td style="padding:6px;text-align:right;color:{DIM};">—</td>'
 
-        for lbl in reversed(p_labels):
+        for lbl in eski_periodler:
             v = row.get(lbl)
             if v is not None:
                 c = renk(v)
